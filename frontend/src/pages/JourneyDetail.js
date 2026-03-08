@@ -12,28 +12,33 @@ import {
   HiOutlineSearch,
   HiOutlinePencilAlt,
   HiOutlineCheck,
-  HiOutlineChevronDown,
-  HiOutlineChevronUp,
+  HiOutlineArrowRight,
 } from 'react-icons/hi';
 import { useToast } from '../contexts/ToastContext';
 
 
 const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 `;
 
 const MainContent = styled.main`
   flex: 1;
-  padding: 48px 64px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
-  animation: ${fadeIn} 0.3s ease;
   overflow-y: auto;
+  background-color: ${props => props.theme.colors.background};
+`;
+
+/* ── Top bar ── */
+const TopBar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 64px 0;
 
   @media (max-width: 768px) {
-    padding: 24px 20px;
+    padding: 16px 20px 0;
   }
 `;
 
@@ -49,96 +54,153 @@ const BackButton = styled.button`
   cursor: pointer;
   padding: 0;
   transition: opacity 0.2s;
-  width: fit-content;
 
-  &:hover { opacity: 0.75; }
+  &:hover { opacity: 0.7; }
 `;
 
-const Header = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
-const Title = styled.h1`
-  font-size: 32px;
+const JourneyTitleText = styled.h1`
+  font-size: 22px;
   font-weight: 700;
   color: ${props => props.theme.colors.primary};
   margin: 0;
-`;
-
-const Subtitle = styled.p`
-  font-size: 15px;
-  color: #777;
-  margin: 0;
-`;
-
-/* ── Step Panels ── */
-const StepPanel = styled.div`
-  background: #fff;
-  border: 1.5px solid ${props => props.active ? props.theme.colors.primary : '#E0E0E0'};
-  border-radius: ${props => props.theme.borderRadius.large};
+  flex: 1;
+  white-space: nowrap;
   overflow: hidden;
-  transition: border-color 0.2s;
+  text-overflow: ellipsis;
 `;
 
-const StepHeader = styled.div`
+/* ── Progress Indicator ── */
+const ProgressWrapper = styled.div`
+  padding: 28px 64px 0;
+
+  @media (max-width: 768px) {
+    padding: 20px 20px 0;
+  }
+`;
+
+const ProgressTrack = styled.div`
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 20px 24px;
-  cursor: pointer;
-  user-select: none;
-
-  &:hover { background: #FAFAFA; }
 `;
 
-const StepNumber = styled.div`
-  width: 32px;
-  height: 32px;
+const ProgressStep = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: ${props => props.clickable ? 'pointer' : 'default'};
+  flex-shrink: 0;
+
+  &:hover .step-circle {
+    opacity: ${props => props.clickable ? 0.8 : 1};
+  }
+`;
+
+const StepCircle = styled.div.attrs({ className: 'step-circle' })`
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  flex-shrink: 0;
-  background-color: ${props => props.done ? props.theme.colors.primary : '#E8E8E8'};
-  color: ${props => props.done ? '#fff' : '#888'};
+  transition: background-color 0.2s, border-color 0.2s;
+
+  ${props => props.status === 'done' && `
+    background-color: ${props.theme.colors.primary};
+    color: #fff;
+    border: 2.5px solid ${props.theme.colors.primary};
+  `}
+  ${props => props.status === 'active' && `
+    background-color: ${props.theme.colors.primary};
+    color: #fff;
+    border: 2.5px solid ${props.theme.colors.primary};
+    box-shadow: 0 0 0 4px ${props.theme.colors.primaryLight};
+  `}
+  ${props => props.status === 'future' && `
+    background-color: #fff;
+    color: #AAA;
+    border: 2.5px solid #D0D0D0;
+  `}
 `;
 
-const StepHeaderText = styled.div`
+const StepLabel = styled.span`
+  font-size: 12px;
+  font-weight: ${props => props.active ? '700' : '500'};
+  color: ${props => props.active ? props.theme.colors.primary : props.done ? props.theme.colors.primary : '#AAA'};
+  white-space: nowrap;
+
+  @media (max-width: 480px) {
+    display: none;
+  }
+`;
+
+const ProgressLine = styled.div`
   flex: 1;
+  height: 2px;
+  background-color: ${props => props.done ? props.theme.colors.primary : '#E0E0E0'};
+  transition: background-color 0.3s;
+  margin: 0 4px;
+  margin-bottom: 22px;
+
+  @media (max-width: 480px) {
+    margin-bottom: 0;
+  }
 `;
 
-const StepName = styled.p`
-  font-size: 16px;
-  font-weight: 600;
+/* ── Step Content Area ── */
+const StepContent = styled.div`
+  flex: 1;
+  padding: 36px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: ${fadeIn} 0.25s ease;
+
+  @media (max-width: 768px) {
+    padding: 24px 20px;
+  }
+`;
+
+const StepHeading = styled.h2`
+  font-size: 26px;
+  font-weight: 700;
   color: ${props => props.theme.colors.primary};
-  margin: 0 0 2px 0;
-`;
-
-const StepStatus = styled.p`
-  font-size: 13px;
-  color: ${props => props.done ? '#4CAF50' : '#999'};
   margin: 0;
-  font-weight: ${props => props.done ? '600' : '400'};
 `;
 
-const StepBody = styled.div`
-  padding: 0 24px 24px;
+const StepSubheading = styled.p`
+  font-size: 15px;
+  color: #666;
+  margin: 0;
+  line-height: 1.6;
+`;
+
+const Card = styled.div`
+  background: #fff;
+  border: 1px solid #E0E0E0;
+  border-radius: ${props => props.theme.borderRadius.large};
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-top: 1px solid #F0F0F0;
+
+  @media (max-width: 768px) {
+    padding: 18px 16px;
+  }
 `;
 
-const SummaryText = styled.p`
+const CardTitle = styled.h3`
   font-size: 15px;
-  color: #444;
-  line-height: 1.7;
+  font-weight: 700;
+  color: ${props => props.theme.colors.primary};
   margin: 0;
-  white-space: pre-wrap;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid ${props => props.theme.colors.primaryLight};
 `;
 
 /* ── Diagnoses ── */
@@ -189,6 +251,14 @@ const DiagnosisDesc = styled.p`
   line-height: 1.5;
 `;
 
+const SummaryText = styled.p`
+  font-size: 14px;
+  color: #444;
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
+`;
+
 /* ── Action Buttons ── */
 const ButtonRow = styled.div`
   display: flex;
@@ -208,6 +278,7 @@ const PrimaryButton = styled.button`
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
   transition: opacity 0.2s;
 
   &:hover { opacity: 0.85; }
@@ -250,7 +321,6 @@ const ChecklistItem = styled.label`
   align-items: flex-start;
   gap: 10px;
   font-size: 14px;
-  color: #444;
   line-height: 1.5;
   cursor: pointer;
   text-decoration: ${props => props.checked ? 'line-through' : 'none'};
@@ -267,26 +337,6 @@ const ChecklistCheckbox = styled.input`
 `;
 
 /* ── Notepad ── */
-const NotepadSection = styled.div`
-  background: #fff;
-  border: 1.5px solid #E0E0E0;
-  border-radius: ${props => props.theme.borderRadius.large};
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const NotepadTitle = styled.h2`
-  font-size: 18px;
-  font-weight: 700;
-  color: ${props => props.theme.colors.primary};
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
 const NotepadTextarea = styled.textarea`
   border: 1px solid #D0D0D0;
   border-radius: ${props => props.theme.borderRadius.medium};
@@ -315,22 +365,52 @@ const SavedIndicator = styled.span`
   transition: opacity 0.4s;
 `;
 
-const CompleteCheckRow = styled.label`
+/* ── Nav Footer ── */
+const NavFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 64px 40px;
+  border-top: 1px solid #F0F0F0;
+
+  @media (max-width: 768px) {
+    padding: 16px 20px 32px;
+  }
+`;
+
+const NavButton = styled.button`
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: #555;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  margin-top: 4px;
+  transition: opacity 0.2s, background-color 0.2s;
+
+  ${props => props.primary ? `
+    background-color: ${props.theme.colors.primary};
+    color: #fff;
+    border: none;
+    &:hover { opacity: 0.88; }
+  ` : `
+    background-color: #fff;
+    color: ${props.theme.colors.primary};
+    border: 1.5px solid #D0D0D0;
+    &:hover { background-color: #F5F5F5; }
+  `}
 `;
 
 const LoadingText = styled.p`
   color: #777;
   font-size: 16px;
+  padding: 48px 64px;
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+const STEPS = ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'];
 
 const JourneyDetail = () => {
   const { id } = useParams();
@@ -338,7 +418,7 @@ const JourneyDetail = () => {
   const { toast } = useToast();
   const [journey, setJourney] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeStep, setActiveStep] = useState(null);
+  const [currentStep, setCurrentStep] = useState(0);
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [generatingChecklist, setGeneratingChecklist] = useState(false);
   const [checkedItems, setCheckedItems] = useState({});
@@ -355,8 +435,13 @@ const JourneyDetail = () => {
       const res = await api.get(`/journeys/${id}`);
       if (!res.ok) throw new Error('Not found');
       const data = await res.json();
-      setJourney(data.journey);
-      setNotes(data.journey.notes || '');
+      const j = data.journey;
+      setJourney(j);
+      setNotes(j.notes || '');
+      // Start on the furthest completed step
+      const completed = j.completed_steps || [];
+      const lastDone = STEPS.reduce((acc, s, i) => completed.includes(s) ? i : acc, -1);
+      setCurrentStep(Math.min(lastDone + 1, STEPS.length - 1));
     } catch (err) {
       console.error('Error fetching journey:', err);
       toast.error('Could not load this health journey.');
@@ -366,10 +451,8 @@ const JourneyDetail = () => {
     }
   };
 
-  const handleStepToggle = async (step, currentlyChecked) => {
-    const updatedCompleted = currentlyChecked
-      ? (journey.completed_steps || []).filter(s => s !== step)
-      : [...(journey.completed_steps || []), step];
+  const markStepComplete = async (stepName) => {
+    const updatedCompleted = [...new Set([...(journey.completed_steps || []), stepName])];
     try {
       const res = await api.put(`/journeys/${journey.id}`, {
         completed_steps: updatedCompleted,
@@ -380,8 +463,22 @@ const JourneyDetail = () => {
         setJourney(data.journey);
       }
     } catch (err) {
-      toast.error('Failed to update progress step.');
+      console.error('Error updating step:', err);
     }
+  };
+
+  const handleContinue = async () => {
+    await markStepComplete(STEPS[currentStep]);
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      navigate('/health-journeys');
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) setCurrentStep(prev => prev - 1);
+    else navigate('/health-journeys');
   };
 
   const handleAnalyzeCoverage = async () => {
@@ -389,7 +486,7 @@ const JourneyDetail = () => {
     try {
       const res = await api.post(`/journeys/${journey.id}/insurance-analysis`, {});
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to analyze coverage');
+      if (!res.ok) throw new Error(data.error || 'Failed');
       setJourney(prev => ({ ...prev, insurance_analysis: data.analysis }));
       toast.success('Coverage analysis ready!');
     } catch (err) {
@@ -404,7 +501,7 @@ const JourneyDetail = () => {
     try {
       const res = await api.post(`/journeys/${journey.id}/checklist`, {});
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate checklist');
+      if (!res.ok) throw new Error(data.error || 'Failed');
       setJourney(prev => ({ ...prev, checklist: data.checklist }));
       toast.success('Pre-visit checklist ready!');
     } catch (err) {
@@ -428,9 +525,7 @@ const JourneyDetail = () => {
   }, [journey]);
 
   const buildZocDocUrl = () => {
-    const diagnoses = journey.diagnoses || [];
-    const topDiagnosis = diagnoses[0]?.condition || '';
-    const insurance = journey.insurance_analysis; // we use plan info from journey context if available
+    const topDiagnosis = (journey.diagnoses || [])[0]?.condition || '';
     const params = new URLSearchParams();
     if (topDiagnosis) params.set('reason_visit', topDiagnosis);
     return `https://www.zocdoc.com/search?${params.toString()}`;
@@ -447,228 +542,220 @@ const JourneyDetail = () => {
   if (!journey) return null;
 
   const diagnoses = journey.diagnoses || [];
-  const completedSteps = journey.completed_steps || [];
   const checklist = journey.checklist || [];
-
-  const stepDone = (step) => completedSteps.includes(step);
-
-  const toggleStep = (stepKey) =>
-    setActiveStep(prev => prev === stepKey ? null : stepKey);
+  const completedSteps = journey.completed_steps || [];
+  const stepStatus = (i) => {
+    if (completedSteps.includes(STEPS[i])) return 'done';
+    if (i === currentStep) return 'active';
+    return 'future';
+  };
 
   return (
     <MainContent>
-      <BackButton onClick={() => navigate('/health-journeys')}>
-        <HiOutlineArrowLeft size={16} />
-        Back to Health Journeys
-      </BackButton>
+      {/* ── Top Bar ── */}
+      <TopBar>
+        <BackButton onClick={() => navigate('/health-journeys')}>
+          <HiOutlineArrowLeft size={16} />
+          Back
+        </BackButton>
+        <JourneyTitleText>{journey.primary_symptom || 'Your Health Journey'}</JourneyTitleText>
+        <span style={{ fontSize: 13, color: '#999', flexShrink: 0 }}>
+          Started {formatDate(journey.created_at)}
+        </span>
+      </TopBar>
 
-      <Header>
-        <Title>{journey.primary_symptom || 'Your Health Journey'}</Title>
-        <Subtitle>Started {formatDate(journey.created_at)}</Subtitle>
-      </Header>
+      {/* ── Progress Indicator ── */}
+      <ProgressWrapper>
+        <ProgressTrack>
+          {STEPS.map((step, i) => {
+            const status = stepStatus(i);
+            const clickable = status === 'done' || i < currentStep;
+            return (
+              <React.Fragment key={step}>
+                <ProgressStep
+                  clickable={clickable}
+                  onClick={() => clickable && setCurrentStep(i)}
+                  title={clickable ? `Go to ${step}` : step}
+                >
+                  <StepCircle status={status}>
+                    {status === 'done' ? <HiOutlineCheck size={15} /> : i + 1}
+                  </StepCircle>
+                  <StepLabel active={status === 'active'} done={status === 'done'}>{step}</StepLabel>
+                </ProgressStep>
+                {i < STEPS.length - 1 && (
+                  <ProgressLine done={completedSteps.includes(STEPS[i])} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </ProgressTrack>
+      </ProgressWrapper>
 
-      {/* ── Step 1: Symptoms ── */}
-      <StepPanel active={activeStep === 'symptoms'}>
-        <StepHeader onClick={() => toggleStep('symptoms')}>
-          <StepNumber done={stepDone('Symptoms')}>
-            {stepDone('Symptoms') ? <HiOutlineCheck size={15} /> : '1'}
-          </StepNumber>
-          <StepHeaderText>
-            <StepName>Symptoms</StepName>
-            <StepStatus done={stepDone('Symptoms')}>{stepDone('Symptoms') ? 'Complete' : 'In progress'}</StepStatus>
-          </StepHeaderText>
-          {activeStep === 'symptoms' ? <HiOutlineChevronUp size={18} color="#999" /> : <HiOutlineChevronDown size={18} color="#999" />}
-        </StepHeader>
+      {/* ── Step Content ── */}
+      <StepContent key={currentStep}>
 
-        {activeStep === 'symptoms' && (
-          <StepBody>
+        {/* STEP 0: Symptoms */}
+        {currentStep === 0 && (
+          <>
+            <div>
+              <StepHeading>Your Symptoms</StepHeading>
+              <StepSubheading>Here's a summary of what you reported and the potential diagnoses identified.</StepSubheading>
+            </div>
+
             {diagnoses.length > 0 && (
-              <DiagnosesList>
-                {diagnoses.map((d, i) => (
-                  <DiagnosisCard key={i}>
-                    <DiagnosisHeader>
-                      <DiagnosisName>{d.condition}</DiagnosisName>
-                      <ConfidenceBadge level={d.confidence}>{d.confidence}</ConfidenceBadge>
-                    </DiagnosisHeader>
-                    {d.description && <DiagnosisDesc>{d.description}</DiagnosisDesc>}
-                  </DiagnosisCard>
-                ))}
-              </DiagnosesList>
+              <Card>
+                <CardTitle>Possible Diagnoses</CardTitle>
+                <DiagnosesList>
+                  {diagnoses.map((d, i) => (
+                    <DiagnosisCard key={i}>
+                      <DiagnosisHeader>
+                        <DiagnosisName>{d.condition}</DiagnosisName>
+                        <ConfidenceBadge level={d.confidence}>{d.confidence}</ConfidenceBadge>
+                      </DiagnosisHeader>
+                      {d.description && <DiagnosisDesc>{d.description}</DiagnosisDesc>}
+                    </DiagnosisCard>
+                  ))}
+                </DiagnosesList>
+              </Card>
             )}
-            {journey.symptom_summary && <SummaryText>{journey.symptom_summary}</SummaryText>}
-            <CompleteCheckRow>
-              <input
-                type="checkbox"
-                checked={stepDone('Symptoms')}
-                onChange={() => handleStepToggle('Symptoms', stepDone('Symptoms'))}
-                style={{ accentColor: '#2D5016', width: 16, height: 16, cursor: 'pointer' }}
-              />
-              Mark step complete
-            </CompleteCheckRow>
-          </StepBody>
+
+            {journey.symptom_summary && (
+              <Card>
+                <CardTitle>Symptom Summary</CardTitle>
+                <SummaryText>{journey.symptom_summary}</SummaryText>
+              </Card>
+            )}
+          </>
         )}
-      </StepPanel>
 
-      {/* ── Step 2: Insurance ── */}
-      <StepPanel active={activeStep === 'insurance'}>
-        <StepHeader onClick={() => toggleStep('insurance')}>
-          <StepNumber done={stepDone('Insurance')}>
-            {stepDone('Insurance') ? <HiOutlineCheck size={15} /> : '2'}
-          </StepNumber>
-          <StepHeaderText>
-            <StepName>Insurance</StepName>
-            <StepStatus done={stepDone('Insurance')}>{stepDone('Insurance') ? 'Complete' : 'Review your coverage'}</StepStatus>
-          </StepHeaderText>
-          {activeStep === 'insurance' ? <HiOutlineChevronUp size={18} color="#999" /> : <HiOutlineChevronDown size={18} color="#999" />}
-        </StepHeader>
+        {/* STEP 1: Insurance */}
+        {currentStep === 1 && (
+          <>
+            <div>
+              <StepHeading>Review Your Insurance</StepHeading>
+              <StepSubheading>Make sure your insurance information is up to date, then get an AI-powered analysis of what your plan covers for your diagnoses.</StepSubheading>
+            </div>
 
-        {activeStep === 'insurance' && (
-          <StepBody>
-            <ButtonRow>
-              <SecondaryButton onClick={() => navigate('/insurance')}>
-                <HiOutlineShieldCheck size={16} />
-                View / Add Insurance
+            <Card>
+              <CardTitle>Your Insurance Plans</CardTitle>
+              <ButtonRow>
+                <SecondaryButton onClick={() => navigate('/insurance')}>
+                  <HiOutlineShieldCheck size={16} />
+                  View / Add Insurance
+                </SecondaryButton>
+                <PrimaryButton onClick={handleAnalyzeCoverage} disabled={generatingAnalysis}>
+                  <HiOutlineSearch size={16} />
+                  {generatingAnalysis ? 'Analyzing…' : 'Analyze My Coverage'}
+                </PrimaryButton>
+              </ButtonRow>
+              {journey.insurance_analysis && (
+                <AnalysisBox>{journey.insurance_analysis}</AnalysisBox>
+              )}
+            </Card>
+          </>
+        )}
+
+        {/* STEP 2: Doctor Visit */}
+        {currentStep === 2 && (
+          <>
+            <div>
+              <StepHeading>Doctor Visit</StepHeading>
+              <StepSubheading>Find a doctor, prepare for your visit, and log your appointment once booked.</StepSubheading>
+            </div>
+
+            <Card>
+              <CardTitle>Find &amp; Book a Doctor</CardTitle>
+              <ButtonRow>
+                <PrimaryButton as="a" href={buildZocDocUrl()} target="_blank" rel="noopener noreferrer">
+                  <HiOutlineSearch size={16} />
+                  Find a Doctor on ZocDoc
+                </PrimaryButton>
+                <SecondaryButton onClick={() => navigate('/appointments', { state: { journeyId: journey.id, reason: getTopDiagnosis() } })}>
+                  <HiOutlineCalendar size={16} />
+                  Log My Appointment
+                </SecondaryButton>
+              </ButtonRow>
+            </Card>
+
+            <Card>
+              <CardTitle>Pre-Visit Checklist</CardTitle>
+              <SecondaryButton
+                onClick={handleGetChecklist}
+                disabled={generatingChecklist}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                <HiOutlineClipboardList size={16} />
+                {generatingChecklist ? 'Generating…' : checklist.length > 0 ? 'Refresh Checklist' : 'Get My Checklist'}
               </SecondaryButton>
-              <PrimaryButton onClick={handleAnalyzeCoverage} disabled={generatingAnalysis}>
-                <HiOutlineSearch size={16} />
-                {generatingAnalysis ? 'Analyzing…' : 'Analyze My Coverage'}
-              </PrimaryButton>
-            </ButtonRow>
+              {checklist.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {checklist.map((item, i) => (
+                    <ChecklistItem key={i} checked={!!checkedItems[i]}>
+                      <ChecklistCheckbox
+                        type="checkbox"
+                        checked={!!checkedItems[i]}
+                        onChange={() => setCheckedItems(prev => ({ ...prev, [i]: !prev[i] }))}
+                      />
+                      {item}
+                    </ChecklistItem>
+                  ))}
+                </div>
+              )}
+            </Card>
 
-            {journey.insurance_analysis && (
-              <AnalysisBox>{journey.insurance_analysis}</AnalysisBox>
-            )}
-
-            <CompleteCheckRow>
-              <input
-                type="checkbox"
-                checked={stepDone('Insurance')}
-                onChange={() => handleStepToggle('Insurance', stepDone('Insurance'))}
-                style={{ accentColor: '#2D5016', width: 16, height: 16, cursor: 'pointer' }}
+            <Card>
+              <CardTitle style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <HiOutlinePencilAlt size={16} />
+                My Questions &amp; Notes
+                <SavedIndicator visible={notesSaved}>
+                  <HiOutlineCheckCircle size={13} /> Saved
+                </SavedIndicator>
+              </CardTitle>
+              <NotepadTextarea
+                placeholder="Write your questions for the doctor, things to remember, or anything about your symptoms…"
+                value={notes}
+                onChange={e => handleNotesChange(e.target.value)}
               />
-              Mark step complete
-            </CompleteCheckRow>
-          </StepBody>
+            </Card>
+          </>
         )}
-      </StepPanel>
 
-      {/* ── Step 3: Doctor Visit ── */}
-      <StepPanel active={activeStep === 'doctor'}>
-        <StepHeader onClick={() => toggleStep('doctor')}>
-          <StepNumber done={stepDone('Doctor Visit')}>
-            {stepDone('Doctor Visit') ? <HiOutlineCheck size={15} /> : '3'}
-          </StepNumber>
-          <StepHeaderText>
-            <StepName>Doctor Visit</StepName>
-            <StepStatus done={stepDone('Doctor Visit')}>{stepDone('Doctor Visit') ? 'Complete' : 'Find a doctor & prepare'}</StepStatus>
-          </StepHeaderText>
-          {activeStep === 'doctor' ? <HiOutlineChevronUp size={18} color="#999" /> : <HiOutlineChevronDown size={18} color="#999" />}
-        </StepHeader>
+        {/* STEP 3: Diagnosis */}
+        {currentStep === 3 && (
+          <>
+            <div>
+              <StepHeading>Diagnosis</StepHeading>
+              <StepSubheading>After your doctor visit, record your official diagnosis here to complete your health journey.</StepSubheading>
+            </div>
 
-        {activeStep === 'doctor' && (
-          <StepBody>
-            <ButtonRow>
-              <PrimaryButton as="a" href={buildZocDocUrl()} target="_blank" rel="noopener noreferrer">
-                <HiOutlineSearch size={16} />
-                Find a Doctor on ZocDoc
-              </PrimaryButton>
-              <SecondaryButton onClick={() => navigate('/appointments', { state: { journeyId: journey.id, reason: getTopDiagnosis() } })}>
-                <HiOutlineCalendar size={16} />
-                Log My Appointment
-              </SecondaryButton>
-            </ButtonRow>
-
-            <SecondaryButton
-              onClick={handleGetChecklist}
-              disabled={generatingChecklist}
-              style={{ alignSelf: 'flex-start' }}
-            >
-              <HiOutlineClipboardList size={16} />
-              {generatingChecklist ? 'Generating…' : checklist.length > 0 ? 'Refresh Checklist' : 'Get Pre-Visit Checklist'}
-            </SecondaryButton>
-
-            {checklist.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {checklist.map((item, i) => (
-                  <ChecklistItem key={i} checked={!!checkedItems[i]}>
-                    <ChecklistCheckbox
-                      type="checkbox"
-                      checked={!!checkedItems[i]}
-                      onChange={() => setCheckedItems(prev => ({ ...prev, [i]: !prev[i] }))}
-                    />
-                    {item}
-                  </ChecklistItem>
-                ))}
-              </div>
-            )}
-
-            <CompleteCheckRow>
-              <input
-                type="checkbox"
-                checked={stepDone('Doctor Visit')}
-                onChange={() => handleStepToggle('Doctor Visit', stepDone('Doctor Visit'))}
-                style={{ accentColor: '#2D5016', width: 16, height: 16, cursor: 'pointer' }}
-              />
-              Mark step complete
-            </CompleteCheckRow>
-          </StepBody>
+            <Card>
+              <CardTitle>Complete Your Journey</CardTitle>
+              <p style={{ fontSize: 14, color: '#555', margin: 0, lineHeight: 1.7 }}>
+                Once you've received your official diagnosis from your doctor, mark this step complete to close out your health journey. You can always come back to review your symptom summary and notes.
+              </p>
+              <ButtonRow>
+                <SecondaryButton onClick={() => navigate('/chatbot')}>
+                  <HiOutlineChat size={16} />
+                  Start a New Chat
+                </SecondaryButton>
+              </ButtonRow>
+            </Card>
+          </>
         )}
-      </StepPanel>
 
-      {/* ── Step 4: Diagnosis ── */}
-      <StepPanel active={activeStep === 'diagnosis'}>
-        <StepHeader onClick={() => toggleStep('diagnosis')}>
-          <StepNumber done={stepDone('Diagnosis')}>
-            {stepDone('Diagnosis') ? <HiOutlineCheck size={15} /> : '4'}
-          </StepNumber>
-          <StepHeaderText>
-            <StepName>Diagnosis</StepName>
-            <StepStatus done={stepDone('Diagnosis')}>{stepDone('Diagnosis') ? 'Complete' : 'Pending doctor visit'}</StepStatus>
-          </StepHeaderText>
-          {activeStep === 'diagnosis' ? <HiOutlineChevronUp size={18} color="#999" /> : <HiOutlineChevronDown size={18} color="#999" />}
-        </StepHeader>
+      </StepContent>
 
-        {activeStep === 'diagnosis' && (
-          <StepBody>
-            <p style={{ fontSize: 14, color: '#666', margin: 0 }}>
-              Mark this step complete after receiving your official diagnosis from your doctor.
-            </p>
-            <CompleteCheckRow>
-              <input
-                type="checkbox"
-                checked={stepDone('Diagnosis')}
-                onChange={() => handleStepToggle('Diagnosis', stepDone('Diagnosis'))}
-                style={{ accentColor: '#2D5016', width: 16, height: 16, cursor: 'pointer' }}
-              />
-              Mark step complete
-            </CompleteCheckRow>
-          </StepBody>
-        )}
-      </StepPanel>
-
-      {/* ── Notepad ── */}
-      <NotepadSection>
-        <NotepadTitle>
-          <HiOutlinePencilAlt size={20} />
-          My Questions &amp; Notes
-          <SavedIndicator visible={notesSaved}>
-            <HiOutlineCheckCircle size={14} /> Saved
-          </SavedIndicator>
-        </NotepadTitle>
-        <NotepadTextarea
-          placeholder="Write your questions for the doctor, things to remember, or any notes about your symptoms…"
-          value={notes}
-          onChange={e => handleNotesChange(e.target.value)}
-        />
-      </NotepadSection>
-
-      {/* ── Bottom actions ── */}
-      <ButtonRow>
-        <SecondaryButton onClick={() => navigate('/chatbot')}>
-          <HiOutlineChat size={16} />
-          Start New Chat
-        </SecondaryButton>
-      </ButtonRow>
+      {/* ── Navigation Footer ── */}
+      <NavFooter>
+        <NavButton onClick={handleBack}>
+          <HiOutlineArrowLeft size={15} />
+          {currentStep === 0 ? 'All Journeys' : 'Back'}
+        </NavButton>
+        <NavButton primary onClick={handleContinue}>
+          {currentStep === STEPS.length - 1 ? 'Complete Journey' : 'Continue'}
+          {currentStep < STEPS.length - 1 && <HiOutlineArrowRight size={15} />}
+        </NavButton>
+      </NavFooter>
     </MainContent>
   );
 };
