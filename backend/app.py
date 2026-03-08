@@ -646,8 +646,12 @@ Generate 10-14 items."""
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
+        import json as json_lib, re as _re
         text = response.content[0].text.strip()
-        import json as json_lib
+        # Strip markdown code fences if Claude wraps the JSON
+        text = _re.sub(r'^```(?:json)?\s*', '', text, flags=_re.MULTILINE)
+        text = _re.sub(r'\s*```\s*$', '', text, flags=_re.MULTILINE)
+        text = text.strip()
         checklist = json_lib.loads(text)
         supabase.table("journeys").update({"checklist": checklist, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", journey_id).eq("user_id", user.id).execute()
         return jsonify({"checklist": checklist, "error": None})

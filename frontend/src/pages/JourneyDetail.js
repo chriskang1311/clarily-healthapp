@@ -449,6 +449,78 @@ const SavedIndicator = styled.span`
   transition: opacity 0.4s;
 `;
 
+const ApptConfirmBanner = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #E8F5E9;
+  border: 1px solid #A5D6A7;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2E7D32;
+`;
+
+const ApptModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+`;
+
+const ApptModalBox = styled.div`
+  background: #fff;
+  border-radius: ${props => props.theme.borderRadius.large};
+  padding: 28px 32px;
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const ApptModalTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 700;
+  color: ${props => props.theme.colors.primary};
+  margin: 0;
+`;
+
+const ApptFieldGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const ApptLabel = styled.label`
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+`;
+
+const ApptInput = styled.input`
+  border: 1.5px solid #D0D0D0;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+  &:focus { border-color: ${props => props.theme.colors.primary}; }
+`;
+
+const ApptModalButtons = styled.div`
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+`;
+
 /* ── Nav Footer ── */
 const NavFooter = styled.div`
   display: flex;
@@ -506,6 +578,9 @@ const JourneyDetail = () => {
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [generatingChecklist, setGeneratingChecklist] = useState(false);
   const [appointmentLogged, setAppointmentLogged] = useState(false);
+  const [showApptModal, setShowApptModal] = useState(false);
+  const [apptForm, setApptForm] = useState({ doctor_name: '', date: '', time: '', reason: '' });
+  const [apptSaving, setApptSaving] = useState(false);
   const [insurancePlans, setInsurancePlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [checkedItems, setCheckedItems] = useState({});
@@ -608,6 +683,27 @@ const JourneyDetail = () => {
       toast.error('Failed to generate checklist.');
     } finally {
       setGeneratingChecklist(false);
+    }
+  };
+
+  const handleLogAppointment = async () => {
+    if (!apptForm.doctor_name.trim() || !apptForm.date || !apptForm.time) return;
+    setApptSaving(true);
+    try {
+      const res = await api.post('/appointments', {
+        ...apptForm,
+        journey_id: journey.id,
+        created_at: new Date().toISOString(),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setAppointmentLogged(true);
+      setShowApptModal(false);
+      setApptForm({ doctor_name: '', date: '', time: '', reason: '' });
+      toast.success('Appointment logged!');
+    } catch {
+      toast.error('Failed to save appointment. Please try again.');
+    } finally {
+      setApptSaving(false);
     }
   };
 
@@ -823,11 +919,20 @@ const JourneyDetail = () => {
                   <HiOutlineSearch size={16} />
                   Find a Doctor on ZocDoc
                 </PrimaryButton>
-                <SecondaryButton onClick={() => { setAppointmentLogged(true); navigate('/appointments', { state: { journeyId: journey.id, reason: getTopDiagnosis() } }); }}>
+                <SecondaryButton onClick={() => {
+                  setApptForm(prev => ({ ...prev, reason: getTopDiagnosis() }));
+                  setShowApptModal(true);
+                }}>
                   <HiOutlineCalendar size={16} />
                   Log My Appointment
                 </SecondaryButton>
               </ButtonRow>
+              {appointmentLogged && (
+                <ApptConfirmBanner>
+                  <HiOutlineCheckCircle size={16} />
+                  Appointment logged — it has been saved to your Appointments tab.
+                </ApptConfirmBanner>
+              )}
             </Card>
 
             <Card>
@@ -928,6 +1033,63 @@ const JourneyDetail = () => {
           </div>
         )}
       </NavFooter>
+
+      {/* ── Log Appointment Modal ── */}
+      {showApptModal && (
+        <ApptModalOverlay onClick={() => setShowApptModal(false)}>
+          <ApptModalBox onClick={e => e.stopPropagation()}>
+            <ApptModalTitle>Log My Appointment</ApptModalTitle>
+
+            <ApptFieldGroup>
+              <ApptLabel>Doctor Name *</ApptLabel>
+              <ApptInput
+                placeholder="Dr. Jane Smith"
+                value={apptForm.doctor_name}
+                onChange={e => setApptForm(prev => ({ ...prev, doctor_name: e.target.value }))}
+              />
+            </ApptFieldGroup>
+
+            <ApptFieldGroup>
+              <ApptLabel>Date *</ApptLabel>
+              <ApptInput
+                type="date"
+                value={apptForm.date}
+                onChange={e => setApptForm(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </ApptFieldGroup>
+
+            <ApptFieldGroup>
+              <ApptLabel>Time *</ApptLabel>
+              <ApptInput
+                type="time"
+                value={apptForm.time}
+                onChange={e => setApptForm(prev => ({ ...prev, time: e.target.value }))}
+              />
+            </ApptFieldGroup>
+
+            <ApptFieldGroup>
+              <ApptLabel>Reason for Visit</ApptLabel>
+              <ApptInput
+                placeholder="e.g. Lower back pain"
+                value={apptForm.reason}
+                onChange={e => setApptForm(prev => ({ ...prev, reason: e.target.value }))}
+              />
+            </ApptFieldGroup>
+
+            <ApptModalButtons>
+              <NavButton onClick={() => setShowApptModal(false)}>Cancel</NavButton>
+              <NavButton
+                primary
+                onClick={handleLogAppointment}
+                disabled={apptSaving || !apptForm.doctor_name.trim() || !apptForm.date || !apptForm.time}
+                style={(apptSaving || !apptForm.doctor_name.trim() || !apptForm.date || !apptForm.time) ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+              >
+                {apptSaving ? 'Saving…' : 'Log Appointment'}
+              </NavButton>
+            </ApptModalButtons>
+          </ApptModalBox>
+        </ApptModalOverlay>
+      )}
     </MainContent>
   );
 };
