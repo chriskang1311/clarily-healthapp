@@ -734,6 +734,30 @@ const ConfirmButton = styled.button`
   }
 `;
 
+/* ── Multiple-Choice UI ── */
+const ChoicesContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 16px 12px;
+`;
+
+const ChoiceButton = styled.button`
+  background: ${props => props.isOther ? 'transparent' : '#fff'};
+  border: 1.5px solid ${props => props.isOther ? '#AAA' : props.theme.colors.primary};
+  color: ${props => props.isOther ? '#666' : props.theme.colors.primary};
+  border-radius: 99px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+
+  &:hover {
+    background-color: ${props => props.isOther ? '#F5F5F5' : props.theme.colors.primaryLight};
+  }
+`;
+
 const STORAGE_KEY = 'clarily-chat-history';
 const DISCLAIMER_KEY = 'clarily-disclaimer-accepted';
 
@@ -758,24 +782,45 @@ const Chatbot = () => {
   const [symptomSummary, setSymptomSummary] = useState(null);
   const [isGeneratingSymptomSummary, setIsGeneratingSymptomSummary] = useState(false);
   const [hasRequestedPossibilities, setHasRequestedPossibilities] = useState(false);
+  const [pendingChoices, setPendingChoices] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
   const chatEndRef = useRef(null);
   const chatAreaRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // Load messages and disclaimer status from localStorage on mount
+  // Load messages from DB session or localStorage on mount
   useEffect(() => {
-    const savedMessages = localStorage.getItem(STORAGE_KEY);
     const disclaimerAccepted = localStorage.getItem(DISCLAIMER_KEY) === 'true';
-    
     setShowDisclaimer(!disclaimerAccepted);
-    
-    if (savedMessages) {
+
+    const loadSession = async () => {
       try {
-        const parsed = JSON.parse(savedMessages);
-        setMessages(parsed);
-      } catch (e) {
-        console.error('Error loading chat history:', e);
+        const res = await api.get('/chat-sessions/current');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.session && data.session.messages && data.session.messages.length > 0) {
+            setSessionId(data.session.id);
+            setMessages(data.session.messages);
+            return;
+          }
+        }
+      } catch (_) {}
+
+      // Fall back to localStorage
+      const savedMessages = localStorage.getItem(STORAGE_KEY);
+      if (savedMessages) {
+        try {
+          const parsed = JSON.parse(savedMessages);
+          if (parsed.length > 0) {
+            setMessages(parsed);
+            return;
+          }
+        } catch (e) {
+          console.error('Error loading chat history:', e);
+        }
       }
-    } else {
+
+      // Start fresh
       const welcomeMessage = {
         role: 'bot',
         content: `Welcome, ${userName}! Can you describe the symptoms you're experiencing?`,
@@ -783,7 +828,9 @@ const Chatbot = () => {
       };
       setMessages([welcomeMessage]);
       saveMessages([welcomeMessage]);
-    }
+    };
+
+    loadSession();
   }, []);
 
   // Auto-scroll to bottom when new messages arrive
@@ -844,6 +891,22 @@ const Chatbot = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
   };
 
+  const saveToDb = async (msgs, currentSessionId) => {
+    try {
+      if (currentSessionId) {
+        await api.put(`/chat-sessions/${currentSessionId}`, { messages: msgs });
+      } else {
+        const res = await api.post('/chat-sessions', { messages: msgs });
+        if (res.ok) {
+          const data = await res.json();
+          setSessionId(data.session.id);
+          return data.session.id;
+        }
+      }
+    } catch (_) {}
+    return currentSessionId;
+  };
+
   const handleAcceptDisclaimer = () => {
     setShowDisclaimer(false);
     localStorage.setItem(DISCLAIMER_KEY, 'true');
@@ -876,9 +939,11 @@ const Chatbot = () => {
     };
     setMessages([welcomeMessage]);
     saveMessages([welcomeMessage]);
+    setSessionId(null);
+    setPendingChoices([]);
     setShowConfirmClear(false);
     setError(null);
-    setHasRequestedPossibilities(false); // Reset flag when clearing conversation
+    setHasRequestedPossibilities(false);
   };
 
   const generateSummary = async () => {
@@ -945,6 +1010,7 @@ const Chatbot = () => {
       setError(null);
     }
 
+    setPendingChoices([]);
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     saveMessages(updatedMessages);
@@ -978,6 +1044,7 @@ const Chatbot = () => {
 
       const botResponse = data.response;
       const possibilities = data.possibilities;
+      const choices = data.choices || [];
 
       const botMessage = {
         role: 'bot',
@@ -989,7 +1056,16 @@ const Chatbot = () => {
       const finalMessages = [...updatedMessages, botMessage];
       setMessages(finalMessages);
       saveMessages(finalMessages);
-      
+      // Persist to DB (debounce not needed here — save on each exchange)
+      saveToDb(finalMessages, sessionId);
+
+      // Set choices for multi-choice UI (only if no possibilities shown)
+      if (!possibilities || possibilities.length === 0) {
+        setPendingChoices(choices);
+      } else {
+        setPendingChoices([]);
+      }
+
       // Set possibilities if provided
       if (possibilities && possibilities.length > 0) {
         setCurrentPossibilities(possibilities);
@@ -1137,7 +1213,14 @@ const Chatbot = () => {
       });
 
       if (journeyResponse.ok) {
-        // Navigate to homepage after a short delay to show the summary
+        const journeyData = await journeyResponse.json();
+        const newJourneyId = journeyData.journey?.id;
+        // Mark chat session as completed
+        if (sessionId) {
+          await api.put(`/chat-sessions/${sessionId}`, { completed: true, journey_id: newJourneyId });
+          setSessionId(null);
+        }
+        localStorage.removeItem(STORAGE_KEY);
         setTimeout(() => {
           navigate('/');
         }, 2000);
@@ -1576,6 +1659,30 @@ const Chatbot = () => {
         <div ref={chatEndRef} />
       </ChatArea>
 
+      {/* Multiple-choice buttons */}
+      {pendingChoices.length > 0 && !isLoading && !isGeneratingSymptomSummary && (
+        <ChoicesContainer>
+          {pendingChoices.map((choice, idx) => {
+            const isOther = choice.toLowerCase().includes('other') || choice.toLowerCase().includes("i'll type");
+            return (
+              <ChoiceButton
+                key={idx}
+                isOther={isOther}
+                onClick={() => {
+                  if (isOther) {
+                    inputRef.current?.focus();
+                  } else {
+                    sendMessage(choice);
+                  }
+                }}
+              >
+                {choice}
+              </ChoiceButton>
+            );
+          })}
+        </ChoicesContainer>
+      )}
+
       <InputContainer>
         {messages.length === 0 && !isLoading && (
           <InputSuggestions>
@@ -1589,6 +1696,7 @@ const Chatbot = () => {
         <form onSubmit={handleSubmit}>
           <InputWrapper>
             <Input
+              ref={inputRef}
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}

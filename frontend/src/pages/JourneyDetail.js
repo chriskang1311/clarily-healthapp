@@ -304,6 +304,82 @@ const SecondaryButton = styled.button`
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
+/* ── Insurance Plan Selector ── */
+const PlanSelectorGrid = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`;
+
+const PlanSelectCard = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  border: 2px solid ${props => props.selected ? props.theme.colors.primary : '#E0E0E0'};
+  background: ${props => props.selected ? props.theme.colors.primaryLight : '#fff'};
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+
+  &:hover { border-color: ${props => props.theme.colors.primary}; }
+`;
+
+const PlanTypeBadge = styled.span`
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background-color: ${props => props.theme.colors.primary};
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+  flex-shrink: 0;
+`;
+
+const PlanInfo = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+`;
+
+const PlanProvider = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: ${props => props.theme.colors.primary};
+`;
+
+const PlanDetail = styled.span`
+  font-size: 12px;
+  color: #666;
+`;
+
+const PlanCheckmark = styled.div`
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid ${props => props.selected ? props.theme.colors.primary : '#CCC'};
+  background: ${props => props.selected ? props.theme.colors.primary : 'transparent'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+`;
+
+const ReadOnlyBanner = styled.div`
+  background: #F5F5F5;
+  border: 1px solid #E0E0E0;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  padding: 12px 20px;
+  font-size: 14px;
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
 /* ── Insurance Analysis ── */
 const AnalysisBox = styled.div`
   background: #F1F8E9;
@@ -430,6 +506,8 @@ const JourneyDetail = () => {
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [generatingChecklist, setGeneratingChecklist] = useState(false);
   const [appointmentLogged, setAppointmentLogged] = useState(false);
+  const [insurancePlans, setInsurancePlans] = useState([]);
+  const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [checkedItems, setCheckedItems] = useState({});
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
@@ -453,6 +531,17 @@ const JourneyDetail = () => {
       setCurrentStep(Math.min(lastDone + 1, STEPS.length - 1));
       // Returning users: don't re-block Doctor Visit step if already logged
       if (completed.includes('Doctor Visit')) setAppointmentLogged(true);
+
+      // Fetch insurance plans for the selector
+      try {
+        const insRes = await api.get('/insurance');
+        if (insRes.ok) {
+          const insData = await insRes.json();
+          const plans = insData.insurance || [];
+          setInsurancePlans(plans);
+          if (plans.length > 0) setSelectedPlanId(plans[0].id);
+        }
+      } catch (_) {}
     } catch (err) {
       console.error('Error fetching journey:', err);
       toast.error('Could not load this health journey.');
@@ -495,7 +584,7 @@ const JourneyDetail = () => {
   const handleAnalyzeCoverage = async () => {
     setGeneratingAnalysis(true);
     try {
-      const res = await api.post(`/journeys/${journey.id}/insurance-analysis`, {});
+      const res = await api.post(`/journeys/${journey.id}/insurance-analysis`, { insurance_id: selectedPlanId });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       setJourney(prev => ({ ...prev, insurance_analysis: data.analysis }));
@@ -568,6 +657,7 @@ const JourneyDetail = () => {
   const diagnoses = journey.diagnoses || [];
   const checklist = journey.checklist || [];
   const completedSteps = journey.completed_steps || [];
+  const isReadOnly = journey.status === 'archived' || completedSteps.length === STEPS.length;
   const stepStatus = (i) => {
     if (completedSteps.includes(STEPS[i])) return 'done';
     if (i === currentStep) return 'active';
@@ -661,17 +751,49 @@ const JourneyDetail = () => {
             </div>
 
             <Card>
-              <CardTitle>Your Insurance Plans</CardTitle>
-              <ButtonRow>
-                <SecondaryButton onClick={() => navigate('/insurance')}>
-                  <HiOutlineShieldCheck size={16} />
-                  View / Add Insurance
-                </SecondaryButton>
-                <PrimaryButton onClick={handleAnalyzeCoverage} disabled={generatingAnalysis}>
-                  <HiOutlineSearch size={16} />
-                  {generatingAnalysis ? 'Analyzing…' : 'Analyze My Coverage'}
-                </PrimaryButton>
-              </ButtonRow>
+              <CardTitle>Select Your Insurance Plan</CardTitle>
+              {insurancePlans.length === 0 ? (
+                <div>
+                  <p style={{ fontSize: 14, color: '#666', margin: '0 0 12px' }}>
+                    No insurance plans found. Add your insurance before analyzing coverage.
+                  </p>
+                  <SecondaryButton onClick={() => navigate('/insurance')}>
+                    <HiOutlineShieldCheck size={16} />
+                    Add Insurance
+                  </SecondaryButton>
+                </div>
+              ) : (
+                <>
+                  <PlanSelectorGrid>
+                    {insurancePlans.map(plan => (
+                      <PlanSelectCard
+                        key={plan.id}
+                        selected={selectedPlanId === plan.id}
+                        onClick={() => setSelectedPlanId(plan.id)}
+                      >
+                        <PlanTypeBadge>{plan.plan_type || 'Primary'}</PlanTypeBadge>
+                        <PlanInfo>
+                          <PlanProvider>{plan.provider}</PlanProvider>
+                          <PlanDetail>{plan.plan_name} · Member ID: {plan.member_id}{plan.group_number ? ` · Group: ${plan.group_number}` : ''}</PlanDetail>
+                        </PlanInfo>
+                        <PlanCheckmark selected={selectedPlanId === plan.id}>
+                          {selectedPlanId === plan.id && <HiOutlineCheck size={12} color="#fff" />}
+                        </PlanCheckmark>
+                      </PlanSelectCard>
+                    ))}
+                  </PlanSelectorGrid>
+                  <ButtonRow>
+                    <SecondaryButton onClick={() => navigate('/insurance')}>
+                      <HiOutlineShieldCheck size={16} />
+                      Manage Insurance
+                    </SecondaryButton>
+                    <PrimaryButton onClick={handleAnalyzeCoverage} disabled={generatingAnalysis || !selectedPlanId}>
+                      <HiOutlineSearch size={16} />
+                      {generatingAnalysis ? 'Analyzing…' : 'Analyze My Coverage'}
+                    </PrimaryButton>
+                  </ButtonRow>
+                </>
+              )}
               {journey.insurance_analysis && (
                 <AnalysisBox>
                   <ReactMarkdown>{journey.insurance_analysis}</ReactMarkdown>
@@ -777,22 +899,29 @@ const JourneyDetail = () => {
           <HiOutlineArrowLeft size={15} />
           {currentStep === 0 ? 'All Journeys' : 'Back'}
         </NavButton>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          {getContinueHint() && (
-            <span style={{ fontSize: 12, color: '#E65100', fontStyle: 'italic' }}>
-              {getContinueHint()}
-            </span>
-          )}
-          <NavButton
-            primary
-            onClick={handleContinue}
-            disabled={!canContinue()}
-            style={!canContinue() ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
-          >
-            {currentStep === STEPS.length - 1 ? 'Complete Journey' : 'Continue'}
-            {currentStep < STEPS.length - 1 && <HiOutlineArrowRight size={15} />}
-          </NavButton>
-        </div>
+        {isReadOnly ? (
+          <ReadOnlyBanner>
+            <HiOutlineCheckCircle size={16} />
+            {journey.status === 'archived' ? 'This journey is archived' : 'Journey Complete'}
+          </ReadOnlyBanner>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            {getContinueHint() && (
+              <span style={{ fontSize: 12, color: '#E65100', fontStyle: 'italic' }}>
+                {getContinueHint()}
+              </span>
+            )}
+            <NavButton
+              primary
+              onClick={handleContinue}
+              disabled={!canContinue()}
+              style={!canContinue() ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
+            >
+              {currentStep === STEPS.length - 1 ? 'Complete Journey' : 'Continue'}
+              {currentStep < STEPS.length - 1 && <HiOutlineArrowRight size={15} />}
+            </NavButton>
+          </div>
+        )}
       </NavFooter>
     </MainContent>
   );

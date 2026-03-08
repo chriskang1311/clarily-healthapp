@@ -93,7 +93,14 @@ When you have enough information, format your response like this:
 CRITICAL:
 - Provide ONLY the top 3-4 most likely diagnoses based on all the information gathered. Rank them by likelihood. Each should have a confidence level (High/Moderate/Low). Use patient-friendly language and avoid medical jargon.
 - These are AI diagnostic suggestions based on the information provided - always emphasize that professional medical evaluation is needed.
-- You MUST provide possibilities when you have enough information, even if the patient previously disagreed. The patient needs to sign off on possibilities to proceed with their health journey."""
+- You MUST provide possibilities when you have enough information, even if the patient previously disagreed. The patient needs to sign off on possibilities to proceed with their health journey.
+
+10. ANSWER CHOICES — After every question you ask the patient, append a choices block on a new line in this exact format:
+##CHOICES_START##["Choice A", "Choice B", "Choice C", "Other / I'll type my own"]##CHOICES_END##
+Rules:
+- The last option must ALWAYS be "Other / I'll type my own"
+- Provide 3–5 concise choices relevant to the question
+- Only include the choices block when asking a question; do NOT include it with diagnostic summaries (##POSSIBILITIES_START## blocks) or closing messages"""
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -299,13 +306,26 @@ def chat():
             except Exception as e:
                 print(f"Error in follow-up request for possibilities: {e}")
 
+        # Parse and strip ##CHOICES_START## block from clean_message
+        choices = []
+        choices_match = re.search(r'##CHOICES_START##(.+?)##CHOICES_END##', clean_message, re.DOTALL)
+        if choices_match:
+            try:
+                choices = json.loads(choices_match.group(1).strip())
+                if not isinstance(choices, list):
+                    choices = []
+            except Exception:
+                choices = []
+            clean_message = re.sub(r'\n?##CHOICES_START##.+?##CHOICES_END##', '', clean_message, flags=re.DOTALL).strip()
+
         return jsonify({
             "response": clean_message,
             "possibilities": possibilities,
+            "choices": choices,
             "error": None
         })
     except Exception as e:
-        return jsonify({"response": None, "possibilities": None, "error": str(e)}), 500
+        return jsonify({"response": None, "possibilities": None, "choices": [], "error": str(e)}), 500
 
 # Summary generation system prompt - Patient-focused
 SUMMARY_SYSTEM_PROMPT = """You are a helpful healthcare assistant creating a personal summary for a patient. Write the summary as if you're talking directly to the patient, using "you" and "your" language. Make it clear, warm, and easy to understand.
@@ -533,6 +553,8 @@ def update_journey(journey_id):
         updates["checklist"] = data["checklist"]
     if "notes" in data:
         updates["notes"] = data["notes"]
+    if "status" in data:
+        updates["status"] = data["status"]
     updates["updated_at"] = data.get("updated_at") or datetime.now(timezone.utc).isoformat()
 
     res = supabase.table("journeys").update(updates).eq("id", journey_id).eq("user_id", user.id).execute()
@@ -541,15 +563,30 @@ def update_journey(journey_id):
     return jsonify({"journey": res.data[0], "error": None})
 
 
+@app.route("/journeys/<int:journey_id>", methods=["DELETE"])
+def delete_journey(journey_id):
+    user = get_current_user()
+    res = supabase.table("journeys").delete().eq("id", journey_id).eq("user_id", user.id).execute()
+    if not res.data:
+        return jsonify({"error": "Journey not found"}), 404
+    return jsonify({"error": None})
+
+
 @app.route("/journeys/<int:journey_id>/insurance-analysis", methods=["POST"])
 def generate_insurance_analysis(journey_id):
     user = get_current_user()
+    data = request.get_json() or {}
+    insurance_id = data.get("insurance_id")
+
     journey_res = supabase.table("journeys").select("diagnoses").eq("id", journey_id).eq("user_id", user.id).execute()
     if not journey_res.data:
         return jsonify({"analysis": None, "error": "Journey not found"}), 404
     diagnoses = journey_res.data[0].get("diagnoses", [])
 
-    insurance_res = supabase.table("insurance").select("*").eq("user_id", user.id).execute()
+    if insurance_id:
+        insurance_res = supabase.table("insurance").select("*").eq("id", insurance_id).eq("user_id", user.id).execute()
+    else:
+        insurance_res = supabase.table("insurance").select("*").eq("user_id", user.id).limit(1).execute()
     insurance_plans = insurance_res.data
 
     if not insurance_plans:
@@ -761,6 +798,49 @@ def delete_insurance(insurance_id):
     if not res.data:
         return jsonify({"error": "Insurance not found"}), 404
     return jsonify({"error": None})
+
+
+# ─── Chat Sessions ────────────────────────────────────────────────────────────
+
+@app.route("/chat-sessions/current", methods=["GET"])
+def get_current_chat_session():
+    user = get_current_user()
+    res = supabase.table("chat_sessions").select("*").eq("user_id", user.id).eq("completed", False).order("created_at", desc=True).limit(1).execute()
+    session = res.data[0] if res.data else None
+    return jsonify({"session": session, "error": None})
+
+
+@app.route("/chat-sessions", methods=["POST"])
+def create_chat_session():
+    user = get_current_user()
+    data = request.get_json() or {}
+    row = {
+        "user_id": user.id,
+        "messages": data.get("messages", []),
+        "completed": False,
+        "journey_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = supabase.table("chat_sessions").insert(row).execute()
+    return jsonify({"session": res.data[0], "error": None}), 201
+
+
+@app.route("/chat-sessions/<int:session_id>", methods=["PUT"])
+def update_chat_session(session_id):
+    user = get_current_user()
+    data = request.get_json() or {}
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if "messages" in data:
+        updates["messages"] = data["messages"]
+    if "completed" in data:
+        updates["completed"] = data["completed"]
+    if "journey_id" in data:
+        updates["journey_id"] = data["journey_id"]
+    res = supabase.table("chat_sessions").update(updates).eq("id", session_id).eq("user_id", user.id).execute()
+    if not res.data:
+        return jsonify({"session": None, "error": "Session not found"}), 404
+    return jsonify({"session": res.data[0], "error": None})
 
 
 # ─── Support ──────────────────────────────────────────────────────────────────
