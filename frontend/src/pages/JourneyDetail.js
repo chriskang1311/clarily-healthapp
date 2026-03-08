@@ -15,6 +15,7 @@ import {
   HiOutlineArrowRight,
 } from 'react-icons/hi';
 import { useToast } from '../contexts/ToastContext';
+import ReactMarkdown from 'react-markdown';
 
 
 const fadeIn = keyframes`
@@ -312,7 +313,14 @@ const AnalysisBox = styled.div`
   font-size: 14px;
   color: #33691E;
   line-height: 1.7;
-  white-space: pre-wrap;
+
+  h1, h2, h3 { color: #33691E; font-size: 15px; margin: 12px 0 6px; }
+  strong { color: #2E7D32; }
+  ul, ol { padding-left: 20px; margin: 6px 0; }
+  li { margin: 4px 0; }
+  hr { border: none; border-top: 1px solid #AED581; margin: 12px 0; }
+  blockquote { border-left: 3px solid #8BC34A; margin: 8px 0; padding-left: 12px; color: #558B2F; }
+  p { margin: 6px 0; }
 `;
 
 /* ── Checklist ── */
@@ -421,6 +429,7 @@ const JourneyDetail = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [generatingChecklist, setGeneratingChecklist] = useState(false);
+  const [appointmentLogged, setAppointmentLogged] = useState(false);
   const [checkedItems, setCheckedItems] = useState({});
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
@@ -442,6 +451,8 @@ const JourneyDetail = () => {
       const completed = j.completed_steps || [];
       const lastDone = STEPS.reduce((acc, s, i) => completed.includes(s) ? i : acc, -1);
       setCurrentStep(Math.min(lastDone + 1, STEPS.length - 1));
+      // Returning users: don't re-block Doctor Visit step if already logged
+      if (completed.includes('Doctor Visit')) setAppointmentLogged(true);
     } catch (err) {
       console.error('Error fetching journey:', err);
       toast.error('Could not load this health journey.');
@@ -532,6 +543,19 @@ const JourneyDetail = () => {
   };
 
   const getTopDiagnosis = () => (journey.diagnoses || [])[0]?.condition || '';
+
+  const canContinue = () => {
+    if (currentStep === 0) return true;
+    if (currentStep === 1) return !!journey.insurance_analysis;
+    if (currentStep === 2) return appointmentLogged;
+    return true;
+  };
+
+  const getContinueHint = () => {
+    if (currentStep === 1 && !journey.insurance_analysis) return 'Please analyze your coverage before continuing.';
+    if (currentStep === 2 && !appointmentLogged) return 'Please log your appointment before continuing.';
+    return '';
+  };
 
   const formatDate = (iso) => {
     if (!iso) return '';
@@ -649,7 +673,9 @@ const JourneyDetail = () => {
                 </PrimaryButton>
               </ButtonRow>
               {journey.insurance_analysis && (
-                <AnalysisBox>{journey.insurance_analysis}</AnalysisBox>
+                <AnalysisBox>
+                  <ReactMarkdown>{journey.insurance_analysis}</ReactMarkdown>
+                </AnalysisBox>
               )}
             </Card>
           </>
@@ -670,7 +696,7 @@ const JourneyDetail = () => {
                   <HiOutlineSearch size={16} />
                   Find a Doctor on ZocDoc
                 </PrimaryButton>
-                <SecondaryButton onClick={() => navigate('/appointments', { state: { journeyId: journey.id, reason: getTopDiagnosis() } })}>
+                <SecondaryButton onClick={() => { setAppointmentLogged(true); navigate('/appointments', { state: { journeyId: journey.id, reason: getTopDiagnosis() } }); }}>
                   <HiOutlineCalendar size={16} />
                   Log My Appointment
                 </SecondaryButton>
@@ -751,10 +777,22 @@ const JourneyDetail = () => {
           <HiOutlineArrowLeft size={15} />
           {currentStep === 0 ? 'All Journeys' : 'Back'}
         </NavButton>
-        <NavButton primary onClick={handleContinue}>
-          {currentStep === STEPS.length - 1 ? 'Complete Journey' : 'Continue'}
-          {currentStep < STEPS.length - 1 && <HiOutlineArrowRight size={15} />}
-        </NavButton>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          {getContinueHint() && (
+            <span style={{ fontSize: 12, color: '#E65100', fontStyle: 'italic' }}>
+              {getContinueHint()}
+            </span>
+          )}
+          <NavButton
+            primary
+            onClick={handleContinue}
+            disabled={!canContinue()}
+            style={!canContinue() ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
+          >
+            {currentStep === STEPS.length - 1 ? 'Complete Journey' : 'Continue'}
+            {currentStep < STEPS.length - 1 && <HiOutlineArrowRight size={15} />}
+          </NavButton>
+        </div>
       </NavFooter>
     </MainContent>
   );

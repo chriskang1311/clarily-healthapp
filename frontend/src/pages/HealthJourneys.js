@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
 import styled, { keyframes } from 'styled-components';
 import {
-  HiOutlineChevronDown,
-  HiOutlineChevronUp,
   HiOutlineDownload,
   HiOutlineChat,
+  HiOutlineArrowRight,
 } from 'react-icons/hi';
 
 
@@ -67,7 +66,7 @@ const NewJourneyButton = styled.button`
 const JourneysContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 `;
 
 const JourneyCard = styled.div`
@@ -75,35 +74,39 @@ const JourneyCard = styled.div`
   border: 1px solid #E0E0E0;
   border-left: 6px solid ${props => props.theme.colors.primary};
   border-radius: ${props => props.theme.borderRadius.large};
-  overflow: hidden;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
   transition: box-shadow 0.2s;
+  cursor: pointer;
 
   &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: flex-start;
   }
 `;
 
-const CardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 24px;
-  cursor: pointer;
-  gap: 16px;
-`;
-
-const CardHeaderLeft = styled.div`
+const CardInfo = styled.div`
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  flex: 1;
+  gap: 8px;
+  min-width: 0;
 `;
 
 const JourneyTitle = styled.h2`
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: ${props => props.theme.colors.primary};
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 const JourneyDate = styled.span`
@@ -111,10 +114,38 @@ const JourneyDate = styled.span`
   color: #888;
 `;
 
-const ProgressSummary = styled.div`
-  font-size: 13px;
+const ProgressRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+`;
+
+const ProgressPill = styled.span`
+  font-size: 12px;
+  font-weight: 600;
   color: ${props => props.theme.colors.primary};
-  font-weight: 500;
+  background-color: ${props => props.theme.colors.primaryLight};
+  padding: 2px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+`;
+
+const ProgressBarTrack = styled.div`
+  flex: 1;
+  height: 4px;
+  background-color: #E0E0E0;
+  border-radius: 99px;
+  overflow: hidden;
+  max-width: 160px;
+`;
+
+const ProgressBarFill = styled.div`
+  height: 100%;
+  background-color: ${props => props.theme.colors.primary};
+  border-radius: 99px;
+  width: ${props => props.pct}%;
+  transition: width 0.4s ease;
 `;
 
 const CardActions = styled.div`
@@ -143,138 +174,21 @@ const IconButton = styled.button`
   }
 `;
 
-const ChevronButton = styled.button`
-  background: none;
+const ViewButton = styled.button`
+  background-color: ${props => props.theme.colors.primary};
+  color: #fff;
   border: none;
-  cursor: pointer;
-  color: ${props => props.theme.colors.primary};
-  display: flex;
-  align-items: center;
-  padding: 4px;
-`;
-
-const CardBody = styled.div`
-  border-top: 1px solid #E0E0E0;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-`;
-
-const Section = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const SectionLabel = styled.h3`
+  border-radius: ${props => props.theme.borderRadius.small};
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #888;
-  margin: 0;
-`;
-
-/* ── Step checklist ── */
-const StepList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const StepRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
-const StepCheckbox = styled.div`
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background-color: ${props => props.checked ? props.theme.colors.primary : 'transparent'};
-  border: 2px solid ${props => props.checked ? props.theme.colors.primary : '#BDBDBD'};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: ${props => props.theme.colors.primary};
-    background-color: ${props => props.checked ? props.theme.colors.primary : props.theme.colors.primaryLight};
-  }
-`;
-
-const StepLabel = styled.span`
-  font-size: 15px;
-  color: ${props => props.completed ? props.theme.colors.primary : '#555'};
-  font-weight: ${props => props.completed ? '600' : '400'};
-  text-decoration: ${props => props.completed ? 'none' : 'none'};
-`;
-
-/* ── Diagnoses ── */
-const DiagnosesList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const DiagnosisRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid #E0E0E0;
-  border-radius: ${props => props.theme.borderRadius.medium};
-  background-color: #FAFAFA;
-`;
+  gap: 6px;
+  transition: opacity 0.2s;
 
-const ConfidenceBadge = styled.span`
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 99px;
-  background-color: ${props =>
-    props.level === 'High' ? '#E8F5E9' :
-    props.level === 'Moderate' ? '#FFF3E0' :
-    '#F5F5F5'};
-  color: ${props =>
-    props.level === 'High' ? '#2E7D32' :
-    props.level === 'Moderate' ? '#E65100' :
-    '#757575'};
-  flex-shrink: 0;
-`;
-
-const DiagnosisName = styled.span`
-  font-size: 15px;
-  font-weight: 500;
-  color: ${props => props.theme.colors.text};
-  flex: 1;
-`;
-
-const DiagnosisDesc = styled.span`
-  font-size: 13px;
-  color: #777;
-`;
-
-/* ── Symptom summary ── */
-const SummaryBox = styled.pre`
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #444;
-  white-space: pre-wrap;
-  background-color: #F9F9F9;
-  border: 1px solid #E0E0E0;
-  border-radius: ${props => props.theme.borderRadius.medium};
-  padding: 16px;
-  margin: 0;
+  &:hover { opacity: 0.85; }
 `;
 
 const EmptyState = styled.div`
@@ -325,13 +239,24 @@ const LoadingText = styled.p`
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const JourneyCardItem = ({ journey, onStepToggle }) => {
-  const [expanded, setExpanded] = useState(false);
+function formatDate(dateString) {
+  if (!dateString) return '';
+  try {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
 
+const JourneyCardItem = ({ journey, onNavigate }) => {
   const completedCount = (journey.completed_steps || []).length;
   const totalCount = (journey.progress_steps || []).length;
+  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const handleDownload = () => {
+  const handleDownload = (e) => {
+    e.stopPropagation();
     const lines = [
       `Health Journey: ${journey.primary_symptom || 'Unknown Symptom'}`,
       `Created: ${formatDate(journey.created_at)}`,
@@ -362,87 +287,30 @@ const JourneyCardItem = ({ journey, onStepToggle }) => {
   };
 
   return (
-    <JourneyCard>
-      <CardHeader onClick={() => setExpanded(e => !e)}>
-        <CardHeaderLeft>
-          <JourneyTitle>{journey.primary_symptom || 'Health Journey'}</JourneyTitle>
-          <JourneyDate>{formatDate(journey.created_at)}</JourneyDate>
-          <ProgressSummary>{completedCount} of {totalCount} steps completed</ProgressSummary>
-        </CardHeaderLeft>
-        <CardActions onClick={e => e.stopPropagation()}>
-          <IconButton onClick={handleDownload} title="Download summary">
-            <HiOutlineDownload size={15} />
-            Download
-          </IconButton>
-        </CardActions>
-        <ChevronButton>
-          {expanded ? <HiOutlineChevronUp size={20} /> : <HiOutlineChevronDown size={20} />}
-        </ChevronButton>
-      </CardHeader>
-
-      {expanded && (
-        <CardBody>
-          {/* Progress Steps */}
-          <Section>
-            <SectionLabel>Progress Steps</SectionLabel>
-            <StepList>
-              {(journey.progress_steps || []).map((step) => {
-                const checked = (journey.completed_steps || []).includes(step);
-                return (
-                  <StepRow key={step}>
-                    <StepCheckbox
-                      checked={checked}
-                      onClick={() => onStepToggle(journey, step, checked)}
-                      title={checked ? 'Mark incomplete' : 'Mark complete'}
-                    >
-                      {checked && '✓'}
-                    </StepCheckbox>
-                    <StepLabel completed={checked}>{step}</StepLabel>
-                  </StepRow>
-                );
-              })}
-            </StepList>
-          </Section>
-
-          {/* Diagnoses */}
-          {journey.diagnoses && journey.diagnoses.length > 0 && (
-            <Section>
-              <SectionLabel>Potential Diagnoses</SectionLabel>
-              <DiagnosesList>
-                {journey.diagnoses.map((d, i) => (
-                  <DiagnosisRow key={i}>
-                    <ConfidenceBadge level={d.confidence}>{d.confidence}</ConfidenceBadge>
-                    <DiagnosisName>{d.condition}</DiagnosisName>
-                    {d.description && <DiagnosisDesc>{d.description}</DiagnosisDesc>}
-                  </DiagnosisRow>
-                ))}
-              </DiagnosesList>
-            </Section>
-          )}
-
-          {/* Symptom Summary */}
-          {journey.symptom_summary && (
-            <Section>
-              <SectionLabel>Symptom Summary</SectionLabel>
-              <SummaryBox>{journey.symptom_summary}</SummaryBox>
-            </Section>
-          )}
-        </CardBody>
-      )}
+    <JourneyCard onClick={() => onNavigate(journey.id)}>
+      <CardInfo>
+        <JourneyTitle>{journey.primary_symptom || 'Health Journey'}</JourneyTitle>
+        <JourneyDate>{formatDate(journey.created_at)}</JourneyDate>
+        <ProgressRow>
+          <ProgressPill>{completedCount} of {totalCount} steps</ProgressPill>
+          <ProgressBarTrack>
+            <ProgressBarFill pct={pct} />
+          </ProgressBarTrack>
+        </ProgressRow>
+      </CardInfo>
+      <CardActions>
+        <IconButton onClick={handleDownload} title="Download summary">
+          <HiOutlineDownload size={14} />
+          Download
+        </IconButton>
+        <ViewButton onClick={e => { e.stopPropagation(); onNavigate(journey.id); }}>
+          View Journey
+          <HiOutlineArrowRight size={13} />
+        </ViewButton>
+      </CardActions>
     </JourneyCard>
   );
 };
-
-function formatDate(dateString) {
-  if (!dateString) return '';
-  try {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric',
-    });
-  } catch {
-    return '';
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -471,26 +339,6 @@ const HealthJourneys = () => {
     }
   };
 
-  const handleStepToggle = async (journey, step, currentlyChecked) => {
-    const updatedCompleted = currentlyChecked
-      ? (journey.completed_steps || []).filter(s => s !== step)
-      : [...(journey.completed_steps || []), step];
-
-    try {
-      const res = await api.put(`/journeys/${journey.id}`, {
-        completed_steps: updatedCompleted,
-        updated_at: new Date().toISOString(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setJourneys(prev => prev.map(j => j.id === journey.id ? data.journey : j));
-      }
-    } catch (err) {
-      console.error('Error updating step:', err);
-      toast.error('Failed to update progress step.');
-    }
-  };
-
   return (
     <MainContent>
       <PageHeader>
@@ -509,7 +357,7 @@ const HealthJourneys = () => {
             <JourneyCardItem
               key={journey.id}
               journey={journey}
-              onStepToggle={handleStepToggle}
+              onNavigate={(id) => navigate(`/journey/${id}`)}
             />
           ))}
         </JourneysContainer>
@@ -517,7 +365,7 @@ const HealthJourneys = () => {
         <EmptyState>
           <EmptyTitle>No health journeys yet</EmptyTitle>
           <EmptyText>
-            Start by describing your symptoms to the Clarily assistant. Your journey will be saved here after you receive a diagnosis.
+            Start by describing your symptoms to the Clarily assistant. Your journey will be saved here after you confirm your diagnoses.
           </EmptyText>
           <StartButton onClick={() => navigate('/chatbot')}>
             Start a New Journey
