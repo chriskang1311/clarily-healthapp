@@ -737,25 +737,49 @@ const ConfirmButton = styled.button`
 /* ── Multiple-Choice UI ── */
 const ChoicesContainer = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 16px 12px;
+  flex-direction: column;
+  border: 1.5px solid #D0D7DE;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0 16px 12px;
+  background: #fff;
 `;
 
-const ChoiceButton = styled.button`
-  background: ${props => props.isOther ? 'transparent' : '#fff'};
-  border: 1.5px solid ${props => props.isOther ? '#AAA' : props.theme.colors.primary};
-  color: ${props => props.isOther ? '#666' : props.theme.colors.primary};
-  border-radius: 99px;
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 500;
+const ChoiceRow = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #E8EAED;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  text-align: left;
+  width: 100%;
+  transition: background-color 0.12s;
+
+  &:last-child {
+    border-bottom: none;
+  }
 
   &:hover {
-    background-color: ${props => props.isOther ? '#F5F5F5' : props.theme.colors.primaryLight};
+    background-color: ${props => props.isOther ? '#F8F8F8' : props.theme.colors.primaryLight};
   }
+`;
+
+const RadioCircle = styled.div`
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid ${props => props.isOther ? '#AAAAAA' : props.theme.colors.primary};
+  flex-shrink: 0;
+`;
+
+const ChoiceText = styled.span`
+  font-size: 14px;
+  font-weight: ${props => props.isOther ? '400' : '600'};
+  color: ${props => props.isOther ? '#888' : props.theme.colors.primary};
+  line-height: 1.4;
 `;
 
 const STORAGE_KEY = 'clarily-chat-history';
@@ -1665,7 +1689,7 @@ const Chatbot = () => {
           {pendingChoices.map((choice, idx) => {
             const isOther = choice.toLowerCase().includes('other') || choice.toLowerCase().includes("i'll type");
             return (
-              <ChoiceButton
+              <ChoiceRow
                 key={idx}
                 isOther={isOther}
                 onClick={() => {
@@ -1676,8 +1700,9 @@ const Chatbot = () => {
                   }
                 }}
               >
-                {choice}
-              </ChoiceButton>
+                <RadioCircle isOther={isOther} />
+                <ChoiceText isOther={isOther}>{choice}</ChoiceText>
+              </ChoiceRow>
             );
           })}
         </ChoicesContainer>
