@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 import anthropic
 import os
@@ -20,6 +20,24 @@ supabase: Client = create_client(
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+def get_current_user():
+    """Extract and verify the Bearer token. Returns the Supabase user or aborts 401."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        abort(401, description='Missing or malformed Authorization header')
+    token = auth_header.split('Bearer ', 1)[1].strip()
+    try:
+        result = supabase.auth.get_user(token)
+        if result.user is None:
+            abort(401, description='Invalid or expired token')
+        return result.user
+    except Exception:
+        abort(401, description='Token verification failed')
+
+@app.errorhandler(401)
+def unauthorized(e):
+    return jsonify({'error': str(e.description)}), 401
 
 # Healthcare professional system prompt - Diagnostic Doctor
 HEALTHCARE_SYSTEM_PROMPT = """You are an experienced, thorough, and compassionate diagnostic physician conducting a comprehensive patient interview. Your primary goal is to gather ALL necessary information to understand the patient's condition fully before providing any assessment.
@@ -414,12 +432,13 @@ def generate_summary():
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def add_notification(message, notif_type="general"):
+def add_notification(message, notif_type="general", user_id=None):
     """Insert a notification row into Supabase."""
     supabase.table("notifications").insert({
         "message": message,
         "type": notif_type,
         "read": False,
+        "user_id": user_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
@@ -428,6 +447,7 @@ def add_notification(message, notif_type="general"):
 
 @app.route("/journeys", methods=["POST"])
 def create_journey():
+    user = get_current_user()
     data = request.get_json()
     row = {
         "primary_symptom": data.get("primary_symptom", ""),
@@ -437,25 +457,29 @@ def create_journey():
         "completed_steps": data.get("completed_steps", ["Symptoms"]),
         "created_at": data.get("created_at") or datetime.now(timezone.utc).isoformat(),
         "updated_at": data.get("updated_at"),
+        "user_id": user.id,
     }
     res = supabase.table("journeys").insert(row).execute()
     journey = res.data[0]
     add_notification(
         f"New health journey started for '{journey['primary_symptom']}'",
         "journey",
+        user_id=user.id,
     )
     return jsonify({"journey": journey, "error": None}), 201
 
 
 @app.route("/journeys", methods=["GET"])
 def get_journeys():
-    res = supabase.table("journeys").select("*").order("created_at", desc=True).execute()
+    user = get_current_user()
+    res = supabase.table("journeys").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
     return jsonify({"journeys": res.data, "error": None})
 
 
 @app.route("/journeys/<int:journey_id>", methods=["GET"])
 def get_journey(journey_id):
-    res = supabase.table("journeys").select("*").eq("id", journey_id).execute()
+    user = get_current_user()
+    res = supabase.table("journeys").select("*").eq("id", journey_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"journey": None, "error": "Journey not found"}), 404
     return jsonify({"journey": res.data[0], "error": None})
@@ -463,6 +487,7 @@ def get_journey(journey_id):
 
 @app.route("/journeys/<int:journey_id>", methods=["PUT"])
 def update_journey(journey_id):
+    user = get_current_user()
     data = request.get_json()
     updates = {}
     if "progress_steps" in data:
@@ -472,7 +497,7 @@ def update_journey(journey_id):
     if "updated_at" in data:
         updates["updated_at"] = data["updated_at"]
 
-    res = supabase.table("journeys").update(updates).eq("id", journey_id).execute()
+    res = supabase.table("journeys").update(updates).eq("id", journey_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"journey": None, "error": "Journey not found"}), 404
     return jsonify({"journey": res.data[0], "error": None})
@@ -482,6 +507,7 @@ def update_journey(journey_id):
 
 @app.route("/appointments", methods=["POST"])
 def create_appointment():
+    user = get_current_user()
     data = request.get_json()
     row = {
         "doctor_name": data.get("doctor_name", ""),
@@ -491,31 +517,35 @@ def create_appointment():
         "journey_id": data.get("journey_id"),
         "status": "upcoming",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": user.id,
     }
     res = supabase.table("appointments").insert(row).execute()
     appointment = res.data[0]
     add_notification(
         f"Appointment booked with {appointment['doctor_name']} on {appointment['date']}",
         "appointment",
+        user_id=user.id,
     )
     return jsonify({"appointment": appointment, "error": None}), 201
 
 
 @app.route("/appointments", methods=["GET"])
 def get_appointments():
-    res = supabase.table("appointments").select("*").order("date").order("time").execute()
+    user = get_current_user()
+    res = supabase.table("appointments").select("*").eq("user_id", user.id).order("date").order("time").execute()
     return jsonify({"appointments": res.data, "error": None})
 
 
 @app.route("/appointments/<int:appointment_id>", methods=["PUT"])
 def update_appointment(appointment_id):
+    user = get_current_user()
     data = request.get_json()
     updates = {
         field: data[field]
         for field in ["doctor_name", "date", "time", "reason", "status", "journey_id"]
         if field in data
     }
-    res = supabase.table("appointments").update(updates).eq("id", appointment_id).execute()
+    res = supabase.table("appointments").update(updates).eq("id", appointment_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"appointment": None, "error": "Appointment not found"}), 404
     return jsonify({"appointment": res.data[0], "error": None})
@@ -523,7 +553,8 @@ def update_appointment(appointment_id):
 
 @app.route("/appointments/<int:appointment_id>", methods=["DELETE"])
 def delete_appointment(appointment_id):
-    res = supabase.table("appointments").delete().eq("id", appointment_id).execute()
+    user = get_current_user()
+    res = supabase.table("appointments").delete().eq("id", appointment_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"error": "Appointment not found"}), 404
     return jsonify({"error": None})
@@ -533,13 +564,15 @@ def delete_appointment(appointment_id):
 
 @app.route("/notifications", methods=["GET"])
 def get_notifications():
-    res = supabase.table("notifications").select("*").order("created_at", desc=True).execute()
+    user = get_current_user()
+    res = supabase.table("notifications").select("*").eq("user_id", user.id).order("created_at", desc=True).execute()
     return jsonify({"notifications": res.data, "error": None})
 
 
 @app.route("/notifications/<int:notification_id>/read", methods=["PUT"])
 def mark_notification_read(notification_id):
-    res = supabase.table("notifications").update({"read": True}).eq("id", notification_id).execute()
+    user = get_current_user()
+    res = supabase.table("notifications").update({"read": True}).eq("id", notification_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"error": "Notification not found"}), 404
     return jsonify({"notification": res.data[0], "error": None})
@@ -547,7 +580,8 @@ def mark_notification_read(notification_id):
 
 @app.route("/notifications/read-all", methods=["PUT"])
 def mark_all_notifications_read():
-    supabase.table("notifications").update({"read": True}).eq("read", False).execute()
+    user = get_current_user()
+    supabase.table("notifications").update({"read": True}).eq("read", False).eq("user_id", user.id).execute()
     return jsonify({"error": None})
 
 
@@ -555,6 +589,7 @@ def mark_all_notifications_read():
 
 @app.route("/insurance", methods=["POST"])
 def create_insurance():
+    user = get_current_user()
     data = request.get_json()
     row = {
         "provider": data.get("provider", ""),
@@ -563,6 +598,7 @@ def create_insurance():
         "group_number": data.get("group_number", ""),
         "plan_type": data.get("plan_type", "Primary"),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": user.id,
     }
     res = supabase.table("insurance").insert(row).execute()
     return jsonify({"insurance": res.data[0], "error": None}), 201
@@ -570,19 +606,21 @@ def create_insurance():
 
 @app.route("/insurance", methods=["GET"])
 def get_insurance():
-    res = supabase.table("insurance").select("*").order("created_at").execute()
+    user = get_current_user()
+    res = supabase.table("insurance").select("*").eq("user_id", user.id).order("created_at").execute()
     return jsonify({"insurance": res.data, "error": None})
 
 
 @app.route("/insurance/<int:insurance_id>", methods=["PUT"])
 def update_insurance(insurance_id):
+    user = get_current_user()
     data = request.get_json()
     updates = {
         field: data[field]
         for field in ["provider", "plan_name", "member_id", "group_number", "plan_type"]
         if field in data
     }
-    res = supabase.table("insurance").update(updates).eq("id", insurance_id).execute()
+    res = supabase.table("insurance").update(updates).eq("id", insurance_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"insurance": None, "error": "Insurance not found"}), 404
     return jsonify({"insurance": res.data[0], "error": None})
@@ -590,7 +628,8 @@ def update_insurance(insurance_id):
 
 @app.route("/insurance/<int:insurance_id>", methods=["DELETE"])
 def delete_insurance(insurance_id):
-    res = supabase.table("insurance").delete().eq("id", insurance_id).execute()
+    user = get_current_user()
+    res = supabase.table("insurance").delete().eq("id", insurance_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"error": "Insurance not found"}), 404
     return jsonify({"error": None})

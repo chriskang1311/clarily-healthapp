@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
@@ -9,7 +10,6 @@ import {
   HiOutlineChat,
 } from 'react-icons/hi';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -458,7 +458,7 @@ const HealthJourneys = () => {
 
   const fetchJourneys = async () => {
     try {
-      const res = await fetch(`${API_URL}/journeys`);
+      const res = await api.get('/journeys');
       if (res.ok) {
         const data = await res.json();
         setJourneys(data.journeys || []);
@@ -477,13 +477,9 @@ const HealthJourneys = () => {
       : [...(journey.completed_steps || []), step];
 
     try {
-      const res = await fetch(`${API_URL}/journeys/${journey.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          completed_steps: updatedCompleted,
-          updated_at: new Date().toISOString(),
-        }),
+      const res = await api.put(`/journeys/${journey.id}`, {
+        completed_steps: updatedCompleted,
+        updated_at: new Date().toISOString(),
       });
       if (res.ok) {
         const data = await res.json();

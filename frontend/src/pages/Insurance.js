@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import styled, { keyframes } from 'styled-components';
@@ -10,7 +11,6 @@ import {
   HiOutlineCreditCard,
 } from 'react-icons/hi';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -320,7 +320,7 @@ const Insurance = () => {
 
   const fetchInsurance = async () => {
     try {
-      const res = await fetch(`${API_URL}/insurance`);
+      const res = await api.get('/insurance');
       if (res.ok) {
         const data = await res.json();
         setPlans(data.insurance || []);
@@ -340,21 +340,13 @@ const Insurance = () => {
     setSaving(true);
     try {
       if (editingId) {
-        const res = await fetch(`${API_URL}/insurance/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
-        });
+        const res = await api.put(`/insurance/${editingId}`, form);
         if (res.ok) {
           const data = await res.json();
           setPlans(prev => prev.map(p => p.id === editingId ? data.insurance : p));
         }
       } else {
-        const res = await fetch(`${API_URL}/insurance`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
-        });
+        const res = await api.post('/insurance', form);
         if (res.ok) {
           const data = await res.json();
           setPlans(prev => [...prev, data.insurance]);
@@ -387,7 +379,7 @@ const Insurance = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this insurance plan?')) return;
     try {
-      const res = await fetch(`${API_URL}/insurance/${id}`, { method: 'DELETE' });
+      const res = await api.delete('/insurance/${id}');
       if (res.ok) {
         setPlans(prev => prev.filter(p => p.id !== id));
       }

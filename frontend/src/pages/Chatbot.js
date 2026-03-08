@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect, useRef } from 'react';
 import useUserName from '../hooks/useUserName';
 import { useToast } from '../contexts/ToastContext';
@@ -735,7 +736,6 @@ const ConfirmButton = styled.button`
 
 const STORAGE_KEY = 'clarily-chat-history';
 const DISCLAIMER_KEY = 'clarily-disclaimer-accepted';
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const Chatbot = () => {
   const navigate = useNavigate();
@@ -909,15 +909,7 @@ const Chatbot = () => {
           return msgObj;
         });
 
-      const response = await fetch(`${API_URL}/summary`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversation: conversationHistory
-        }),
-      });
+      const response = await api.post('/summary', { conversation: conversationHistory });
 
       if (!response.ok) {
         throw new Error('Failed to generate summary');
@@ -969,15 +961,9 @@ const Chatbot = () => {
           content: msg.content
         }));
 
-      const response = await fetch(`${API_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: messageText.trim(),
-          conversation: conversationHistory
-        }),
+      const response = await api.post('/chat', {
+        message: messageText.trim(),
+        conversation: conversationHistory
       });
 
       if (!response.ok) {
@@ -1090,15 +1076,9 @@ const Chatbot = () => {
           return msgObj;
         });
 
-      const response = await fetch(`${API_URL}/symptom-summary`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversation: conversationHistory,
-          possibilities: currentPossibilities
-        }),
+      const response = await api.post('/symptom-summary', {
+        conversation: conversationHistory,
+        possibilities: currentPossibilities
       });
 
       if (!response.ok) {
@@ -1134,20 +1114,14 @@ const Chatbot = () => {
       const now = new Date().toISOString();
       
       // Create journey via API
-      const journeyResponse = await fetch(`${API_URL}/journeys`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          primary_symptom: primarySymptom,
-          symptom_summary: summary,
-          diagnoses: currentPossibilities || [],
-          progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],
-          completed_steps: ['Symptoms'],
-          created_at: now,
-          updated_at: now
-        }),
+      const journeyResponse = await api.post('/journeys', {
+        primary_symptom: primarySymptom,
+        symptom_summary: summary,
+        diagnoses: currentPossibilities || [],
+        progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],
+        completed_steps: ['Symptoms'],
+        created_at: now,
+        updated_at: now
       });
 
       if (journeyResponse.ok) {
@@ -1181,20 +1155,14 @@ const Chatbot = () => {
         const primarySymptom = extractPrimarySymptom();
         const now = new Date().toISOString();
         
-        await fetch(`${API_URL}/journeys`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            primary_symptom: primarySymptom,
-            symptom_summary: '',
-            diagnoses: currentPossibilities || [],
-            progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],
-            completed_steps: ['Symptoms'],
-            created_at: now,
-            updated_at: now
-          }),
+        await api.post('/journeys', {
+          primary_symptom: primarySymptom,
+          symptom_summary: '',
+          diagnoses: currentPossibilities || [],
+          progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],
+          completed_steps: ['Symptoms'],
+          created_at: now,
+          updated_at: now
         });
       } catch (journeyErr) {
         console.error('Error creating journey:', journeyErr);

@@ -5,7 +5,7 @@ import { HiOutlineUser, HiOutlineBell, HiOutlineMenu } from 'react-icons/hi';
 import Logo from './Logo';
 import useUserName from '../hooks/useUserName';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+import { api } from '../api';
 
 const HeaderContainer = styled.header`
   display: flex;
@@ -137,7 +137,7 @@ const Header = ({ onMenuClick }) => {
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await fetch(`${API_URL}/notifications`);
+      const res = await api.get('/notifications');
       if (res.ok) {
         const data = await res.json();
         const count = (data.notifications || []).filter(n => !n.read).length;
@@ -168,7 +168,7 @@ const Header = ({ onMenuClick }) => {
             <UnreadBadge>{unreadCount > 99 ? '99+' : unreadCount}</UnreadBadge>
           )}
         </NotificationWrapper>
-        <ProfileSection>
+        <ProfileSection as={Link} to="/profile" style={{ textDecoration: 'none', cursor: 'pointer' }}>
           <UserIcon />
           <UserName>{userName}</UserName>
         </ProfileSection>

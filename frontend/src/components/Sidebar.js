@@ -1,13 +1,16 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
   HiOutlineChat,
   HiOutlineHeart,
   HiOutlineUser,
   HiOutlineCurrencyDollar,
-  HiOutlineQuestionMarkCircle
+  HiOutlineQuestionMarkCircle,
+  HiOutlineCog,
+  HiOutlineLogout,
 } from 'react-icons/hi';
+import { useAuth } from '../contexts/AuthContext';
 
 const SidebarContainer = styled.aside`
   width: 240px;
@@ -17,6 +20,8 @@ const SidebarContainer = styled.aside`
   padding: 24px 0;
   min-height: calc(100vh - 73px);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 
   @media (max-width: 768px) {
     position: fixed;
@@ -35,6 +40,7 @@ const NavList = styled.ul`
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
 `;
 
 const NavItem = styled.li`
@@ -65,16 +71,53 @@ const IconWrapper = styled.span`
   justify-content: center;
 `;
 
+const Divider = styled.hr`
+  border: none;
+  border-top: 1px solid #E0E0E0;
+  margin: 8px 12px;
+`;
+
+const LogoutButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  width: 100%;
+  color: #888;
+  background: none;
+  border: none;
+  border-radius: ${props => props.theme.borderRadius.medium};
+  font-size: 16px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  text-align: left;
+
+  &:hover {
+    background-color: #F5F5F5;
+    color: #555;
+  }
+`;
+
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const navItems = [
-    { path: '/chatbot', icon: HiOutlineChat, label: 'Symptom Chat' },
-    { path: '/health-journeys', icon: HiOutlineHeart, label: 'Health Journeys' },
-    { path: '/appointments', icon: HiOutlineUser, label: 'Appointments' },
-    { path: '/insurance', icon: HiOutlineCurrencyDollar, label: 'Insurance' },
-    { path: '/support', icon: HiOutlineQuestionMarkCircle, label: 'Support' },
+    { path: '/chatbot',         icon: HiOutlineChat,              label: 'Symptom Chat' },
+    { path: '/health-journeys', icon: HiOutlineHeart,             label: 'Health Journeys' },
+    { path: '/appointments',    icon: HiOutlineUser,              label: 'Appointments' },
+    { path: '/insurance',       icon: HiOutlineCurrencyDollar,    label: 'Insurance' },
+    { path: '/support',         icon: HiOutlineQuestionMarkCircle,label: 'Support' },
+    { path: '/profile',         icon: HiOutlineCog,               label: 'Profile' },
   ];
+
+  const handleLogout = async () => {
+    await logout();
+    onClose();
+    navigate('/login');
+  };
 
   return (
     <SidebarContainer isOpen={isOpen}>
@@ -94,6 +137,17 @@ const Sidebar = ({ isOpen, onClose }) => {
             </NavItem>
           );
         })}
+
+        <Divider />
+
+        <NavItem>
+          <LogoutButton onClick={handleLogout}>
+            <IconWrapper>
+              <HiOutlineLogout size={20} />
+            </IconWrapper>
+            Log Out
+          </LogoutButton>
+        </NavItem>
       </NavList>
     </SidebarContainer>
   );

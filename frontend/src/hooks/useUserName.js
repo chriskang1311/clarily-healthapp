@@ -1,5 +1,8 @@
+import { useAuth } from '../contexts/AuthContext';
+
 const useUserName = () => {
-  return localStorage.getItem('clarily-user-name') || 'User';
+  const { user } = useAuth();
+  return user?.user_metadata?.display_name || 'User';
 };
 
 export default useUserName;

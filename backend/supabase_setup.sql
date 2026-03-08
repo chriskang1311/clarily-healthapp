@@ -48,3 +48,27 @@ CREATE TABLE IF NOT EXISTS support_messages (
   message    TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- ─── Auth Migration (run once after initial setup) ────────────────────────────
+-- Add user_id to user-owned tables
+
+ALTER TABLE journeys       ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE appointments   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE notifications  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE insurance      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_journeys_user_id      ON journeys(user_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_user_id  ON appointments(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_insurance_user_id     ON insurance(user_id);
+
+ALTER TABLE journeys      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insurance     ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users_own_journeys"      ON journeys      FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users_own_appointments"  ON appointments  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users_own_notifications" ON notifications FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users_own_insurance"     ON insurance     FOR ALL USING (auth.uid() = user_id);
+-- ─────────────────────────────────────────────────────────────────────────────

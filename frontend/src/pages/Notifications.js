@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import styled, { keyframes } from 'styled-components';
@@ -9,7 +10,6 @@ import {
   HiOutlineInformationCircle,
 } from 'react-icons/hi';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -186,7 +186,7 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch(`${API_URL}/notifications`);
+      const res = await api.get('/notifications');
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
@@ -201,7 +201,7 @@ const Notifications = () => {
 
   const markRead = async (id) => {
     try {
-      const res = await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PUT' });
+      const res = await api.put('/notifications/${id}/read');
       if (res.ok) {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
       }
@@ -213,7 +213,7 @@ const Notifications = () => {
 
   const markAllRead = async () => {
     try {
-      const res = await fetch(`${API_URL}/notifications/read-all`, { method: 'PUT' });
+      const res = await api.put('/notifications/read-all');
       if (res.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       }

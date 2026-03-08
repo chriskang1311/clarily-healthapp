@@ -1,9 +1,9 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
 import styled from 'styled-components';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const MainContent = styled.main`
   flex: 1;
@@ -180,7 +180,7 @@ const Homepage = () => {
 
   const fetchJourneys = async () => {
     try {
-      const response = await fetch(`${API_URL}/journeys`);
+      const response = await api.get('/journeys');
       if (response.ok) {
         const data = await response.json();
         setJourneys(data.journeys || []);

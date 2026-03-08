@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import {
@@ -7,7 +8,6 @@ import {
   HiOutlineMail,
 } from 'react-icons/hi';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -284,11 +284,7 @@ const Support = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await fetch(`${API_URL}/support/contact`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      const res = await api.post('/support/contact', form);
       if (!res.ok) throw new Error('Server error');
       setSubmitted(true);
       setForm(EMPTY_FORM);

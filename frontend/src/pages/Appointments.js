@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import styled, { keyframes } from 'styled-components';
@@ -10,7 +11,6 @@ import {
   HiOutlineCheck,
 } from 'react-icons/hi';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -322,7 +322,7 @@ const Appointments = () => {
 
   const fetchAppointments = async () => {
     try {
-      const res = await fetch(`${API_URL}/appointments`);
+      const res = await api.get('/appointments');
       if (res.ok) {
         const data = await res.json();
         setAppointments(data.appointments || []);
@@ -344,22 +344,14 @@ const Appointments = () => {
     setSaving(true);
     try {
       if (editingId) {
-        const res = await fetch(`${API_URL}/appointments/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
-        });
+        const res = await api.put(`/appointments/${editingId}`, form);
         if (res.ok) {
           const data = await res.json();
           setAppointments(prev => prev.map(a => a.id === editingId ? data.appointment : a));
           flashSuccess(editingId);
         }
       } else {
-        const res = await fetch(`${API_URL}/appointments`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, created_at: new Date().toISOString() }),
-        });
+        const res = await api.post('/appointments', { ...form, created_at: new Date().toISOString() });
         if (res.ok) {
           const data = await res.json();
           setAppointments(prev => [...prev, data.appointment]);
@@ -392,7 +384,7 @@ const Appointments = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Cancel this appointment?')) return;
     try {
-      const res = await fetch(`${API_URL}/appointments/${id}`, { method: 'DELETE' });
+      const res = await api.delete('/appointments/${id}');
       if (res.ok) {
         setAppointments(prev => prev.filter(a => a.id !== id));
       }

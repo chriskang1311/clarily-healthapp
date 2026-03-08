@@ -1,3 +1,4 @@
+import { api } from '../api';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
@@ -9,7 +10,6 @@ import {
 } from 'react-icons/hi';
 import { useToast } from '../contexts/ToastContext';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -207,7 +207,7 @@ const JourneyDetail = () => {
 
   const fetchJourney = async () => {
     try {
-      const res = await fetch(`${API_URL}/journeys/${id}`);
+      const res = await api.get('/journeys/${id}');
       if (!res.ok) throw new Error('Not found');
       const data = await res.json();
       setJourney(data.journey);
@@ -226,13 +226,9 @@ const JourneyDetail = () => {
       : [...(journey.completed_steps || []), step];
 
     try {
-      const res = await fetch(`${API_URL}/journeys/${journey.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          completed_steps: updatedCompleted,
-          updated_at: new Date().toISOString(),
-        }),
+      const res = await api.put(`/journeys/${journey.id}`, {
+        completed_steps: updatedCompleted,
+        updated_at: new Date().toISOString(),
       });
       if (res.ok) {
         const data = await res.json();
