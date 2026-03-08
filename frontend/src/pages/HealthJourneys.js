@@ -365,7 +365,7 @@ const JourneyCardItem = ({ journey, onStepToggle }) => {
     <JourneyCard>
       <CardHeader onClick={() => setExpanded(e => !e)}>
         <CardHeaderLeft>
-          <JourneyTitle>Journey: {journey.primary_symptom || 'Symptoms'}</JourneyTitle>
+          <JourneyTitle>{journey.primary_symptom || 'Health Journey'}</JourneyTitle>
           <JourneyDate>{formatDate(journey.created_at)}</JourneyDate>
           <ProgressSummary>{completedCount} of {totalCount} steps completed</ProgressSummary>
         </CardHeaderLeft>

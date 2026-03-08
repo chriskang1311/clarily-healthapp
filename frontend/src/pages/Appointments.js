@@ -1,5 +1,6 @@
 import { api } from '../api';
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
 import styled, { keyframes } from 'styled-components';
 import {
@@ -308,6 +309,7 @@ const EMPTY_FORM = {
 
 const Appointments = () => {
   const { toast } = useToast();
+  const location = useLocation();
   const [appointments, setAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -318,6 +320,16 @@ const Appointments = () => {
 
   useEffect(() => {
     fetchAppointments();
+    // Pre-fill form if navigated from JourneyDetail
+    const state = location.state;
+    if (state?.reason || state?.journeyId) {
+      setForm(prev => ({
+        ...prev,
+        reason: state.reason || '',
+        journey_id: state.journeyId || '',
+      }));
+      setShowForm(true);
+    }
   }, []);
 
   const fetchAppointments = async () => {

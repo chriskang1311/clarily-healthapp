@@ -55,10 +55,10 @@ const WelcomeSection = styled.div`
   }
   
   ${props => props.isCollapsed && `
-    padding: 12px 32px;
-    
+    padding: 8px 24px;
+
     @media (max-width: 768px) {
-      padding: 8px 20px;
+      padding: 6px 16px;
     }
   `}
 `;
@@ -138,26 +138,26 @@ const IconWrapper = styled.div`
 `;
 
 const WelcomeTitle = styled.h1`
-  font-size: 32px;
+  font-size: 22px;
   font-weight: 700;
   color: ${props => props.theme.colors.primary};
-  margin: 0 0 12px 0;
-  
+  margin: 0 0 8px 0;
+
   @media (max-width: 768px) {
-    font-size: 24px;
-    margin: 0 0 8px 0;
+    font-size: 18px;
+    margin: 0 0 6px 0;
   }
 `;
 
 const PrimaryPrompt = styled.p`
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 600;
   color: ${props => props.theme.colors.primary};
-  margin: 0 0 12px 0;
-  
+  margin: 0 0 8px 0;
+
   @media (max-width: 768px) {
-    font-size: 18px;
-    margin: 0 0 8px 0;
+    font-size: 14px;
+    margin: 0 0 6px 0;
   }
 `;
 
@@ -752,7 +752,7 @@ const Chatbot = () => {
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [isWelcomeCollapsed, setIsWelcomeCollapsed] = useState(false);
+  const [isWelcomeCollapsed, setIsWelcomeCollapsed] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [currentPossibilities, setCurrentPossibilities] = useState(null);
   const [symptomSummary, setSymptomSummary] = useState(null);
@@ -1109,13 +1109,25 @@ const Chatbot = () => {
       // Hide possibilities display
       setCurrentPossibilities(null);
       
-      // Extract primary symptom and create journey
-      const primarySymptom = extractPrimarySymptom();
+      // Generate AI title; fall back to keyword extraction if it fails
+      let journeyTitle = extractPrimarySymptom();
+      try {
+        const titleRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/generate-title`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation: conversationHistory, diagnoses: currentPossibilities || [] }),
+        });
+        if (titleRes.ok) {
+          const titleData = await titleRes.json();
+          if (titleData.title) journeyTitle = titleData.title;
+        }
+      } catch (_) { /* keep fallback */ }
+
       const now = new Date().toISOString();
-      
+
       // Create journey via API
       const journeyResponse = await api.post('/journeys', {
-        primary_symptom: primarySymptom,
+        primary_symptom: journeyTitle,
         symptom_summary: summary,
         diagnoses: currentPossibilities || [],
         progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],
@@ -1152,11 +1164,11 @@ const Chatbot = () => {
       
       // Still try to create journey and navigate
       try {
-        const primarySymptom = extractPrimarySymptom();
+        const fallbackTitle = extractPrimarySymptom();
         const now = new Date().toISOString();
-        
+
         await api.post('/journeys', {
-          primary_symptom: primarySymptom,
+          primary_symptom: fallbackTitle,
           symptom_summary: '',
           diagnoses: currentPossibilities || [],
           progress_steps: ['Symptoms', 'Insurance', 'Doctor Visit', 'Diagnosis'],

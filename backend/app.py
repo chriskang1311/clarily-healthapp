@@ -400,6 +400,39 @@ def generate_symptom_summary():
     except Exception as e:
         return jsonify({"summary": None, "error": str(e)}), 500
 
+@app.route("/generate-title", methods=["POST"])
+def generate_journey_title():
+    data = request.get_json()
+    conversation_history = data.get("conversation", [])
+    diagnoses = data.get("diagnoses", [])
+
+    conversation_text = ""
+    for msg in conversation_history[:10]:
+        role = "Patient" if msg.get("role") == "user" else "Doctor"
+        conversation_text += f"{role}: {msg.get('content', '')}\n"
+
+    diagnoses_text = ", ".join([d.get("condition", "") for d in diagnoses[:3]]) if diagnoses else ""
+
+    prompt = f"""Patient conversation (first exchanges):
+{conversation_text}
+Potential diagnoses: {diagnoses_text}
+
+In 6 words or fewer, write a clear clinical title for this patient's health journey.
+Examples: "Recurring migraines with light sensitivity", "Chest pain after exertion", "Persistent fatigue and joint pain"
+Return ONLY the title, nothing else, no punctuation at the end."""
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=50,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        title = response.content[0].text.strip().strip('"').strip("'")
+        return jsonify({"title": title, "error": None})
+    except Exception as e:
+        return jsonify({"title": None, "error": str(e)}), 500
+
+
 @app.route("/summary", methods=["POST"])
 def generate_summary():
     data = request.get_json()
@@ -494,13 +527,108 @@ def update_journey(journey_id):
         updates["progress_steps"] = data["progress_steps"]
     if "completed_steps" in data:
         updates["completed_steps"] = data["completed_steps"]
-    if "updated_at" in data:
-        updates["updated_at"] = data["updated_at"]
+    if "insurance_analysis" in data:
+        updates["insurance_analysis"] = data["insurance_analysis"]
+    if "checklist" in data:
+        updates["checklist"] = data["checklist"]
+    if "notes" in data:
+        updates["notes"] = data["notes"]
+    updates["updated_at"] = data.get("updated_at") or datetime.now(timezone.utc).isoformat()
 
     res = supabase.table("journeys").update(updates).eq("id", journey_id).eq("user_id", user.id).execute()
     if not res.data:
         return jsonify({"journey": None, "error": "Journey not found"}), 404
     return jsonify({"journey": res.data[0], "error": None})
+
+
+@app.route("/journeys/<int:journey_id>/insurance-analysis", methods=["POST"])
+def generate_insurance_analysis(journey_id):
+    user = get_current_user()
+    journey_res = supabase.table("journeys").select("diagnoses").eq("id", journey_id).eq("user_id", user.id).execute()
+    if not journey_res.data:
+        return jsonify({"analysis": None, "error": "Journey not found"}), 404
+    diagnoses = journey_res.data[0].get("diagnoses", [])
+
+    insurance_res = supabase.table("insurance").select("*").eq("user_id", user.id).execute()
+    insurance_plans = insurance_res.data
+
+    if not insurance_plans:
+        return jsonify({"analysis": None, "error": "No insurance plans found. Please add your insurance first."}), 400
+
+    diagnoses_text = "\n".join([f"- {d.get('condition', '')} ({d.get('confidence', '')} confidence)" for d in diagnoses])
+    insurance_text = ""
+    for plan in insurance_plans:
+        insurance_text += f"- {plan.get('plan_type', 'Primary')}: {plan.get('provider', '')} — {plan.get('plan_name', '')} (Member ID: {plan.get('member_id', '')}, Group: {plan.get('group_number', 'N/A')})\n"
+
+    prompt = f"""Patient's potential diagnoses:
+{diagnoses_text}
+
+Patient's insurance plans:
+{insurance_text}
+
+Write a helpful insurance coverage analysis for this patient. Cover:
+1. Which diagnoses are typically covered under their plan type
+2. Whether a referral is usually required to see a specialist
+3. What the patient should expect in terms of copays or out-of-pocket costs (general guidance, not specific dollar amounts)
+4. Any important steps to take before the visit (e.g., pre-authorization, in-network verification)
+5. A brief recommendation on what to ask their insurance provider
+
+Keep it practical, warm, and written in plain language for a patient (not a clinician). Use bullet points."""
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        analysis = response.content[0].text.strip()
+        supabase.table("journeys").update({"insurance_analysis": analysis, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", journey_id).eq("user_id", user.id).execute()
+        return jsonify({"analysis": analysis, "error": None})
+    except Exception as e:
+        return jsonify({"analysis": None, "error": str(e)}), 500
+
+
+@app.route("/journeys/<int:journey_id>/checklist", methods=["POST"])
+def generate_checklist(journey_id):
+    user = get_current_user()
+    journey_res = supabase.table("journeys").select("diagnoses").eq("id", journey_id).eq("user_id", user.id).execute()
+    if not journey_res.data:
+        return jsonify({"checklist": None, "error": "Journey not found"}), 404
+    diagnoses = journey_res.data[0].get("diagnoses", [])
+
+    diagnoses_text = ", ".join([d.get("condition", "") for d in diagnoses]) if diagnoses else "unspecified condition"
+
+    prompt = f"""A patient is preparing to visit a doctor for: {diagnoses_text}.
+
+Generate a practical pre-doctor-visit checklist as a JSON array of strings. Each item should be a short, actionable task.
+Include items about: symptom documentation, medication lists, questions to ask, what to bring, insurance cards, and any condition-specific preparations.
+Return ONLY a valid JSON array of strings, no other text. Example format: ["Write down when symptoms started", "Bring a list of current medications"]
+Generate 10-14 items."""
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        import json as json_lib
+        checklist = json_lib.loads(text)
+        supabase.table("journeys").update({"checklist": checklist, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", journey_id).eq("user_id", user.id).execute()
+        return jsonify({"checklist": checklist, "error": None})
+    except Exception as e:
+        return jsonify({"checklist": None, "error": str(e)}), 500
+
+
+@app.route("/journeys/<int:journey_id>/notes", methods=["PUT"])
+def update_journey_notes(journey_id):
+    user = get_current_user()
+    data = request.get_json()
+    notes = data.get("notes", "")
+    res = supabase.table("journeys").update({"notes": notes, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", journey_id).eq("user_id", user.id).execute()
+    if not res.data:
+        return jsonify({"notes": None, "error": "Journey not found"}), 404
+    return jsonify({"notes": res.data[0].get("notes", ""), "error": None})
 
 
 # ─── Appointments ─────────────────────────────────────────────────────────────

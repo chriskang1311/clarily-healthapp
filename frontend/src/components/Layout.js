@@ -15,7 +15,7 @@ const ContentWrapper = styled.div`
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 `;
 
 const Backdrop = styled.div`
