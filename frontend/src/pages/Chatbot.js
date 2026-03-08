@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import styled from 'styled-components';
+import useUserName from '../hooks/useUserName';
+import { useToast } from '../contexts/ToastContext';
+import styled, { keyframes } from 'styled-components';
 import ChatMessage from '../components/ChatMessage';
 import LoadingIndicator from '../components/LoadingIndicator';
 import PossibilitiesDisplay from '../components/PossibilitiesDisplay';
 import SymptomSummary from '../components/SymptomSummary';
 import { useNavigate } from 'react-router-dom';
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { 
   HiQuestionMarkCircle, 
   HiOutlineX, 
@@ -20,7 +23,8 @@ import {
   HiOutlinePrinter,
   HiOutlineMail,
   HiOutlineQuestionMarkCircle,
-  HiOutlineSave
+  HiOutlineSave,
+  HiOutlineMicrophone
 } from 'react-icons/hi';
 
 const ChatContainer = styled.div`
@@ -441,6 +445,35 @@ const SendButton = styled.button`
   }
 `;
 
+const pulse = keyframes`
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(229, 57, 53, 0); }
+`;
+
+const MicButton = styled.button`
+  padding: 14px 18px;
+  background-color: ${props => props.listening ? '#E53935' : '#f5f5f5'};
+  color: ${props => props.listening ? '#fff' : props.theme.colors.primary};
+  border: 1.5px solid ${props => props.listening ? '#E53935' : '#E0E0E0'};
+  border-radius: ${props => props.theme.borderRadius.medium};
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  animation: ${props => props.listening ? pulse : 'none'} 1.2s ease infinite;
+
+  &:hover:not(:disabled) {
+    background-color: ${props => props.listening ? '#C62828' : '#eee'};
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+`;
+
 const ErrorMessage = styled.div`
   padding: 14px 18px;
   background-color: #ffebee;
@@ -706,6 +739,9 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 const Chatbot = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const userName = useUserName();
+  const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -742,7 +778,7 @@ const Chatbot = () => {
     } else {
       const welcomeMessage = {
         role: 'bot',
-        content: 'Welcome, Chris! Can you describe the symptoms you\'re experiencing?',
+        content: `Welcome, ${userName}! Can you describe the symptoms you're experiencing?`,
         timestamp: new Date().toISOString()
       };
       setMessages([welcomeMessage]);
@@ -754,6 +790,14 @@ const Chatbot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  // When voice recognition stops, populate input with transcript
+  useEffect(() => {
+    if (!listening && transcript) {
+      setInputValue(transcript);
+      resetTranscript();
+    }
+  }, [listening, transcript, resetTranscript]);
 
   // Ensure possibilities are shown after enough exchanges
   useEffect(() => {
@@ -827,7 +871,7 @@ const Chatbot = () => {
   const confirmClearConversation = () => {
     const welcomeMessage = {
       role: 'bot',
-      content: 'Welcome back, Chris! Can you describe the symptoms you\'re experiencing?',
+      content: `Welcome back, ${userName}! Can you describe the symptoms you're experiencing?`,
       timestamp: new Date().toISOString()
     };
     setMessages([welcomeMessage]);
@@ -1305,10 +1349,10 @@ const Chatbot = () => {
     if (!symptomSummary) return;
     try {
       await navigator.clipboard.writeText(symptomSummary);
-      alert('Symptom summary copied to clipboard!');
+      toast.success('Symptom summary copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard. Please try again.');
+      toast.error('Failed to copy to clipboard. Please try again.');
     }
   };
 
@@ -1368,7 +1412,7 @@ const Chatbot = () => {
               <HiQuestionMarkCircle />
             </IconWrapper>
           </IconsContainer>
-          <WelcomeTitle>Welcome, Chris!</WelcomeTitle>
+          <WelcomeTitle>Welcome, {userName}!</WelcomeTitle>
           <PrimaryPrompt>Can you describe the symptoms you're experiencing?</PrimaryPrompt>
           <InstructionText>
             Share as much or as little detail as you'd like and I'll follow up to help you better understand your health.
@@ -1509,10 +1553,10 @@ const Chatbot = () => {
                     onCopy={async () => {
                       try {
                         await navigator.clipboard.writeText(message.symptomSummary);
-                        alert('Symptom summary copied to clipboard!');
+                        toast.success('Symptom summary copied to clipboard!');
                       } catch (err) {
                         console.error('Failed to copy:', err);
-                        alert('Failed to copy to clipboard. Please try again.');
+                        toast.error('Failed to copy to clipboard. Please try again.');
                       }
                     }}
                   />
@@ -1573,6 +1617,20 @@ const Chatbot = () => {
               disabled={isLoading || isGeneratingSymptomSummary}
               aria-label="Message input"
             />
+            {browserSupportsSpeechRecognition && (
+              <MicButton
+                type="button"
+                listening={listening}
+                disabled={isLoading || isGeneratingSymptomSummary}
+                onClick={() => listening
+                  ? SpeechRecognition.stopListening()
+                  : SpeechRecognition.startListening({ continuous: false })
+                }
+                title={listening ? 'Stop listening' : 'Speak your symptoms'}
+              >
+                <HiOutlineMicrophone />
+              </MicButton>
+            )}
             <SendButton type="submit" disabled={isLoading || isGeneratingSymptomSummary || !inputValue.trim()}>
               Send
             </SendButton>
@@ -1655,11 +1713,15 @@ const Chatbot = () => {
                       <HiOutlineMail />
                       Email
                     </SummaryActionButton>
-                    <SummaryActionButton 
-                      onClick={() => {
-                        navigator.clipboard.writeText(summaryText);
-                        alert('Summary copied to clipboard!');
-                      }} 
+                    <SummaryActionButton
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(summaryText);
+                          toast.success('Summary copied to clipboard!');
+                        } catch {
+                          toast.error('Failed to copy. Please try again.');
+                        }
+                      }}
                       title="Copy summary to clipboard"
                     >
                       <HiOutlineClipboard />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
 import styled from 'styled-components';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
@@ -169,6 +170,7 @@ const LoadingText = styled.p`
 
 const Homepage = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [journeys, setJourneys] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -185,6 +187,7 @@ const Homepage = () => {
       }
     } catch (err) {
       console.error('Error fetching journeys:', err);
+      toast.error('Failed to load your health journeys.');
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +199,7 @@ const Homepage = () => {
 
   const handleStartJourney = (journeyId) => {
     // Navigate to journey flow page - route to be defined later
-    navigate(`/journey/${journeyId}`); // Placeholder route
+    navigate(`/journey/${journeyId}`);
   };
 
   const formatDate = (dateString) => {

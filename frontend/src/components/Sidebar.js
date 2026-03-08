@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
-import { 
+import {
+  HiOutlineChat,
   HiOutlineHeart,
   HiOutlineUser,
   HiOutlineCurrencyDollar,
@@ -10,10 +11,23 @@ import {
 
 const SidebarContainer = styled.aside`
   width: 240px;
+  flex-shrink: 0;
   background-color: ${props => props.theme.colors.background};
   border-right: 1px solid #E0E0E0;
   padding: 24px 0;
   min-height: calc(100vh - 73px);
+  overflow-y: auto;
+
+  @media (max-width: 768px) {
+    position: fixed;
+    top: 57px;
+    left: ${props => props.isOpen ? '0' : '-240px'};
+    height: calc(100vh - 57px);
+    z-index: 200;
+    transition: left 0.28s ease;
+    box-shadow: ${props => props.isOpen ? '2px 0 16px rgba(0,0,0,0.15)' : 'none'};
+    min-height: unset;
+  }
 `;
 
 const NavList = styled.ul`
@@ -51,26 +65,27 @@ const IconWrapper = styled.span`
   justify-content: center;
 `;
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', icon: HiOutlineHeart, label: 'Health Journeys' },
+    { path: '/chatbot', icon: HiOutlineChat, label: 'Symptom Chat' },
+    { path: '/health-journeys', icon: HiOutlineHeart, label: 'Health Journeys' },
     { path: '/appointments', icon: HiOutlineUser, label: 'Appointments' },
     { path: '/insurance', icon: HiOutlineCurrencyDollar, label: 'Insurance' },
     { path: '/support', icon: HiOutlineQuestionMarkCircle, label: 'Support' },
   ];
 
   return (
-    <SidebarContainer>
+    <SidebarContainer isOpen={isOpen}>
       <NavList>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
-          
+
           return (
             <NavItem key={item.path}>
-              <NavLink to={item.path} isActive={isActive}>
+              <NavLink to={item.path} isActive={isActive} onClick={onClose}>
                 <IconWrapper>
                   <Icon size={20} />
                 </IconWrapper>
@@ -85,4 +100,3 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
-

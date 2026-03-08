@@ -1,14 +1,22 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import openai
+import anthropic
 import os
 import json
 import re
+from datetime import datetime, timezone
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 # Load environment variables from .env file
 load_dotenv()
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+# Supabase client
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY"),
+)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -64,7 +72,7 @@ When you have enough information, format your response like this:
 ]
 ##POSSIBILITIES_END##
 
-CRITICAL: 
+CRITICAL:
 - Provide ONLY the top 3-4 most likely diagnoses based on all the information gathered. Rank them by likelihood. Each should have a confidence level (High/Moderate/Low). Use patient-friendly language and avoid medical jargon.
 - These are AI diagnostic suggestions based on the information provided - always emphasize that professional medical evaluation is needed.
 - You MUST provide possibilities when you have enough information, even if the patient previously disagreed. The patient needs to sign off on possibilities to proceed with their health journey."""
@@ -75,56 +83,54 @@ def chat():
     user_message = data.get("message", "")
     conversation_history = data.get("conversation", [])
 
-    # Build messages array with system prompt and conversation history
-    messages = [
-        {"role": "system", "content": HEALTHCARE_SYSTEM_PROMPT}
-    ]
-    
+    # Build messages array (system prompt passed separately to Anthropic API)
+    messages = []
+
     # Add conversation history
     for msg in conversation_history:
         messages.append({
             "role": msg.get("role", "user"),
             "content": msg.get("content", "")
         })
-    
+
     # Add current user message
     messages.append({"role": "user", "content": user_message})
-    
+
     # Count user messages to check if enough information has been gathered
     user_message_count = sum(1 for msg in conversation_history if msg.get("role") == "user") + 1
     has_previous_possibilities = any("##POSSIBILITIES_START##" in str(msg.get("content", "")) for msg in conversation_history)
 
     try:
-        # Use the new OpenAI API (v1+)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=HEALTHCARE_SYSTEM_PROMPT,
             messages=messages,
-            temperature=0.7
         )
 
-        bot_message = response.choices[0].message.content
-        
+        bot_message = response.content[0].text
+
         # Check if response contains possibilities
         possibilities = None
         clean_message = bot_message
-        
+
         if "##POSSIBILITIES_START##" in bot_message and "##POSSIBILITIES_END##" in bot_message:
             try:
                 start_idx = bot_message.find("##POSSIBILITIES_START##") + len("##POSSIBILITIES_START##")
                 end_idx = bot_message.find("##POSSIBILITIES_END##")
                 possibilities_json = bot_message[start_idx:end_idx].strip()
-                
+
                 # Clean up common JSON issues that AI might generate
                 # Remove trailing commas before closing brackets/braces
                 possibilities_json = re.sub(r',\s*([}\]])', r'\1', possibilities_json)
-                
+
                 # Try to parse the JSON
                 possibilities = json.loads(possibilities_json)
-                
+
                 # Validate that it's a list
                 if not isinstance(possibilities, list):
                     raise ValueError("Possibilities must be a list/array")
-                
+
                 # Validate and clean up each possibility
                 cleaned_possibilities = []
                 for p in possibilities:
@@ -139,19 +145,19 @@ def chat():
                             cleaned_p["confidence"] = "Moderate"
                         if cleaned_p["condition"]:  # Only add if condition exists
                             cleaned_possibilities.append(cleaned_p)
-                
+
                 possibilities = cleaned_possibilities
-                
+
                 # Limit to top 3-4 diagnoses
                 if len(possibilities) > 4:
                     possibilities = possibilities[:4]
-                
+
                 # Remove the possibilities markers from the message
                 clean_message = bot_message[:bot_message.find("##POSSIBILITIES_START##")].strip()
                 after_possibilities = bot_message[bot_message.find("##POSSIBILITIES_END##") + len("##POSSIBILITIES_END##"):].strip()
                 if after_possibilities:
                     clean_message += "\n\n" + after_possibilities
-                    
+
             except Exception as e:
                 print(f"Error parsing possibilities: {e}")
                 print(f"Raw JSON string: {possibilities_json if 'possibilities_json' in locals() else 'N/A'}")
@@ -192,37 +198,38 @@ def chat():
                     after_possibilities = bot_message[bot_message.find("##POSSIBILITIES_END##") + len("##POSSIBILITIES_END##"):].strip()
                     if after_possibilities:
                         clean_message += "\n\n" + after_possibilities
-        
+
         # FALLBACK: If enough exchanges have occurred (10+ user messages) and no possibilities were provided,
         # and the user hasn't explicitly disagreed, automatically request possibilities
         if possibilities is None and user_message_count >= 10 and not has_previous_possibilities:
             # Make a follow-up request specifically asking for possibilities
             follow_up_messages = messages + [
                 {"role": "assistant", "content": bot_message},
-                {"role": "user", "content": "Based on all the information I've provided, can you please provide your assessment of potential diagnoses using the possibilities format? I need to see the diagnostic possibilities to proceed."}
+                {"role": "user", "content": "Based on all the information I've provided, can you please provide your assessment of potential diagnoses using the possibilities format? I need to see the diagnostic possibilities to proceed."},
             ]
-            
+
             try:
-                follow_up_response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                follow_up_response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=2048,
+                    system=HEALTHCARE_SYSTEM_PROMPT,
                     messages=follow_up_messages,
-                    temperature=0.7
                 )
-                
-                follow_up_message = follow_up_response.choices[0].message.content
-                
+
+                follow_up_message = follow_up_response.content[0].text
+
                 # Check if follow-up response contains possibilities
                 if "##POSSIBILITIES_START##" in follow_up_message and "##POSSIBILITIES_END##" in follow_up_message:
                     try:
                         start_idx = follow_up_message.find("##POSSIBILITIES_START##") + len("##POSSIBILITIES_START##")
                         end_idx = follow_up_message.find("##POSSIBILITIES_END##")
                         possibilities_json = follow_up_message[start_idx:end_idx].strip()
-                        
+
                         # Clean up common JSON issues
                         possibilities_json = re.sub(r',\s*([}\]])', r'\1', possibilities_json)
-                        
+
                         possibilities = json.loads(possibilities_json)
-                        
+
                         # Validate and clean
                         if isinstance(possibilities, list):
                             cleaned_possibilities = []
@@ -240,7 +247,7 @@ def chat():
                             possibilities = cleaned_possibilities[:4]
                         else:
                             possibilities = None
-                        
+
                         # Append to clean message
                         clean_message += "\n\n" + follow_up_message[:follow_up_message.find("##POSSIBILITIES_START##")].strip()
                         after_possibilities = follow_up_message[follow_up_message.find("##POSSIBILITIES_END##") + len("##POSSIBILITIES_END##"):].strip()
@@ -273,9 +280,9 @@ def chat():
                             print(f"Error in fallback parsing from follow-up: {e2}")
             except Exception as e:
                 print(f"Error in follow-up request for possibilities: {e}")
-        
+
         return jsonify({
-            "response": clean_message, 
+            "response": clean_message,
             "possibilities": possibilities,
             "error": None
         })
@@ -344,37 +351,33 @@ def generate_symptom_summary():
     conversation_history = data.get("conversation", [])
     possibilities = data.get("possibilities", [])
 
-    # Build messages array for symptom summary generation
-    messages = [
-        {"role": "system", "content": SYMPTOM_SUMMARY_PROMPT}
-    ]
-    
     # Convert conversation to a readable format
     conversation_text = "PATIENT INTERVIEW CONVERSATION:\n\n"
     for msg in conversation_history:
         role_label = "DOCTOR" if msg.get("role") == "assistant" else "PATIENT"
         conversation_text += f"{role_label}: {msg.get('content', '')}\n\n"
-    
+
     # Add possibilities if provided
     possibilities_text = ""
     if possibilities:
         possibilities_text = "\n\nPOTENTIAL DIAGNOSES IDENTIFIED:\n"
-        for p in possibilities[:4]:  # Limit to top 4
+        for p in possibilities[:4]:
             possibilities_text += f"- {p.get('condition', '')} ({p.get('confidence', '')} confidence)\n"
-    
-    messages.append({
+
+    messages = [{
         "role": "user",
         "content": f"Create a very brief, concise symptom summary for a doctor visit based on this patient interview:\n\n{conversation_text}{possibilities_text}\n\nRemember: Keep it extremely brief (150-200 words max), structured, and professional for a healthcare provider to quickly read."
-    })
+    }]
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=SYMPTOM_SUMMARY_PROMPT,
             messages=messages,
-            temperature=0.2  # Very low temperature for consistent, concise summaries
         )
 
-        summary = response.choices[0].message.content
+        summary = response.content[0].text
         return jsonify({"summary": summary, "error": None})
     except Exception as e:
         return jsonify({"summary": None, "error": str(e)}), 500
@@ -384,84 +387,228 @@ def generate_summary():
     data = request.get_json()
     conversation_history = data.get("conversation", [])
 
-    # Build messages array for summary generation
-    messages = [
-        {"role": "system", "content": SUMMARY_SYSTEM_PROMPT}
-    ]
-    
     # Convert conversation to a readable format
     conversation_text = "PATIENT INTERVIEW CONVERSATION:\n\n"
     for msg in conversation_history:
         role_label = "DOCTOR" if msg.get("role") == "assistant" else "PATIENT"
         conversation_text += f"{role_label}: {msg.get('content', '')}\n\n"
-    
-    messages.append({
+
+    messages = [{
         "role": "user",
         "content": f"Please create a comprehensive summary of this patient interview:\n\n{conversation_text}"
-    })
+    }]
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=SUMMARY_SYSTEM_PROMPT,
             messages=messages,
-            temperature=0.3  # Lower temperature for more consistent summaries
         )
 
-        summary = response.choices[0].message.content
+        summary = response.content[0].text
         return jsonify({"summary": summary, "error": None})
     except Exception as e:
         return jsonify({"summary": None, "error": str(e)}), 500
 
-# In-memory storage for journeys (in production, use a database)
-journeys_storage = []
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def add_notification(message, notif_type="general"):
+    """Insert a notification row into Supabase."""
+    supabase.table("notifications").insert({
+        "message": message,
+        "type": notif_type,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+
+# ─── Journeys ─────────────────────────────────────────────────────────────────
 
 @app.route("/journeys", methods=["POST"])
 def create_journey():
     data = request.get_json()
-    
-    journey = {
-        "id": len(journeys_storage) + 1,
+    row = {
         "primary_symptom": data.get("primary_symptom", ""),
         "symptom_summary": data.get("symptom_summary", ""),
         "diagnoses": data.get("diagnoses", []),
         "progress_steps": data.get("progress_steps", ["Symptoms", "Insurance", "Doctor Visit", "Diagnosis"]),
         "completed_steps": data.get("completed_steps", ["Symptoms"]),
-        "created_at": data.get("created_at"),
-        "updated_at": data.get("updated_at")
+        "created_at": data.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        "updated_at": data.get("updated_at"),
     }
-    
-    journeys_storage.append(journey)
+    res = supabase.table("journeys").insert(row).execute()
+    journey = res.data[0]
+    add_notification(
+        f"New health journey started for '{journey['primary_symptom']}'",
+        "journey",
+    )
     return jsonify({"journey": journey, "error": None}), 201
+
 
 @app.route("/journeys", methods=["GET"])
 def get_journeys():
-    # Return journeys in reverse chronological order (most recent first)
-    sorted_journeys = sorted(journeys_storage, key=lambda x: x.get("created_at", ""), reverse=True)
-    return jsonify({"journeys": sorted_journeys, "error": None})
+    res = supabase.table("journeys").select("*").order("created_at", desc=True).execute()
+    return jsonify({"journeys": res.data, "error": None})
+
+
+@app.route("/journeys/<int:journey_id>", methods=["GET"])
+def get_journey(journey_id):
+    res = supabase.table("journeys").select("*").eq("id", journey_id).execute()
+    if not res.data:
+        return jsonify({"journey": None, "error": "Journey not found"}), 404
+    return jsonify({"journey": res.data[0], "error": None})
+
 
 @app.route("/journeys/<int:journey_id>", methods=["PUT"])
 def update_journey(journey_id):
     data = request.get_json()
-    
-    # Find the journey
-    journey = None
-    for j in journeys_storage:
-        if j["id"] == journey_id:
-            journey = j
-            break
-    
-    if not journey:
-        return jsonify({"journey": None, "error": "Journey not found"}), 404
-    
-    # Update fields
+    updates = {}
     if "progress_steps" in data:
-        journey["progress_steps"] = data["progress_steps"]
+        updates["progress_steps"] = data["progress_steps"]
     if "completed_steps" in data:
-        journey["completed_steps"] = data["completed_steps"]
+        updates["completed_steps"] = data["completed_steps"]
     if "updated_at" in data:
-        journey["updated_at"] = data["updated_at"]
-    
-    return jsonify({"journey": journey, "error": None})
+        updates["updated_at"] = data["updated_at"]
+
+    res = supabase.table("journeys").update(updates).eq("id", journey_id).execute()
+    if not res.data:
+        return jsonify({"journey": None, "error": "Journey not found"}), 404
+    return jsonify({"journey": res.data[0], "error": None})
+
+
+# ─── Appointments ─────────────────────────────────────────────────────────────
+
+@app.route("/appointments", methods=["POST"])
+def create_appointment():
+    data = request.get_json()
+    row = {
+        "doctor_name": data.get("doctor_name", ""),
+        "date": data.get("date", ""),
+        "time": data.get("time", ""),
+        "reason": data.get("reason", ""),
+        "journey_id": data.get("journey_id"),
+        "status": "upcoming",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = supabase.table("appointments").insert(row).execute()
+    appointment = res.data[0]
+    add_notification(
+        f"Appointment booked with {appointment['doctor_name']} on {appointment['date']}",
+        "appointment",
+    )
+    return jsonify({"appointment": appointment, "error": None}), 201
+
+
+@app.route("/appointments", methods=["GET"])
+def get_appointments():
+    res = supabase.table("appointments").select("*").order("date").order("time").execute()
+    return jsonify({"appointments": res.data, "error": None})
+
+
+@app.route("/appointments/<int:appointment_id>", methods=["PUT"])
+def update_appointment(appointment_id):
+    data = request.get_json()
+    updates = {
+        field: data[field]
+        for field in ["doctor_name", "date", "time", "reason", "status", "journey_id"]
+        if field in data
+    }
+    res = supabase.table("appointments").update(updates).eq("id", appointment_id).execute()
+    if not res.data:
+        return jsonify({"appointment": None, "error": "Appointment not found"}), 404
+    return jsonify({"appointment": res.data[0], "error": None})
+
+
+@app.route("/appointments/<int:appointment_id>", methods=["DELETE"])
+def delete_appointment(appointment_id):
+    res = supabase.table("appointments").delete().eq("id", appointment_id).execute()
+    if not res.data:
+        return jsonify({"error": "Appointment not found"}), 404
+    return jsonify({"error": None})
+
+
+# ─── Notifications ────────────────────────────────────────────────────────────
+
+@app.route("/notifications", methods=["GET"])
+def get_notifications():
+    res = supabase.table("notifications").select("*").order("created_at", desc=True).execute()
+    return jsonify({"notifications": res.data, "error": None})
+
+
+@app.route("/notifications/<int:notification_id>/read", methods=["PUT"])
+def mark_notification_read(notification_id):
+    res = supabase.table("notifications").update({"read": True}).eq("id", notification_id).execute()
+    if not res.data:
+        return jsonify({"error": "Notification not found"}), 404
+    return jsonify({"notification": res.data[0], "error": None})
+
+
+@app.route("/notifications/read-all", methods=["PUT"])
+def mark_all_notifications_read():
+    supabase.table("notifications").update({"read": True}).eq("read", False).execute()
+    return jsonify({"error": None})
+
+
+# ─── Insurance ────────────────────────────────────────────────────────────────
+
+@app.route("/insurance", methods=["POST"])
+def create_insurance():
+    data = request.get_json()
+    row = {
+        "provider": data.get("provider", ""),
+        "plan_name": data.get("plan_name", ""),
+        "member_id": data.get("member_id", ""),
+        "group_number": data.get("group_number", ""),
+        "plan_type": data.get("plan_type", "Primary"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = supabase.table("insurance").insert(row).execute()
+    return jsonify({"insurance": res.data[0], "error": None}), 201
+
+
+@app.route("/insurance", methods=["GET"])
+def get_insurance():
+    res = supabase.table("insurance").select("*").order("created_at").execute()
+    return jsonify({"insurance": res.data, "error": None})
+
+
+@app.route("/insurance/<int:insurance_id>", methods=["PUT"])
+def update_insurance(insurance_id):
+    data = request.get_json()
+    updates = {
+        field: data[field]
+        for field in ["provider", "plan_name", "member_id", "group_number", "plan_type"]
+        if field in data
+    }
+    res = supabase.table("insurance").update(updates).eq("id", insurance_id).execute()
+    if not res.data:
+        return jsonify({"insurance": None, "error": "Insurance not found"}), 404
+    return jsonify({"insurance": res.data[0], "error": None})
+
+
+@app.route("/insurance/<int:insurance_id>", methods=["DELETE"])
+def delete_insurance(insurance_id):
+    res = supabase.table("insurance").delete().eq("id", insurance_id).execute()
+    if not res.data:
+        return jsonify({"error": "Insurance not found"}), 404
+    return jsonify({"error": None})
+
+
+# ─── Support ──────────────────────────────────────────────────────────────────
+
+@app.route("/support/contact", methods=["POST"])
+def contact_support():
+    data = request.get_json()
+    supabase.table("support_messages").insert({
+        "name": data.get("name", ""),
+        "email": data.get("email", ""),
+        "message": data.get("message", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return jsonify({"success": True, "error": None})
+
 
 @app.route("/")
 def home():

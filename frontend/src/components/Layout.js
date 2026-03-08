@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import Header from './Header';
 import Sidebar from './Sidebar';
@@ -18,12 +18,30 @@ const ContentWrapper = styled.div`
   overflow: hidden;
 `;
 
+const Backdrop = styled.div`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: ${props => props.visible ? 'block' : 'none'};
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 150;
+  }
+`;
+
 const Layout = ({ children }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const openSidebar = () => setSidebarOpen(true);
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
     <LayoutContainer>
-      <Header />
+      <Header onMenuClick={openSidebar} />
       <ContentWrapper>
-        <Sidebar />
+        <Backdrop visible={sidebarOpen} onClick={closeSidebar} />
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
         {children}
       </ContentWrapper>
     </LayoutContainer>
@@ -31,4 +49,3 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
-
