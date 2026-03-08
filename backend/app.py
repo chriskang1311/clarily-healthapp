@@ -566,9 +566,7 @@ def update_journey(journey_id):
 @app.route("/journeys/<int:journey_id>", methods=["DELETE"])
 def delete_journey(journey_id):
     user = get_current_user()
-    res = supabase.table("journeys").delete().eq("id", journey_id).eq("user_id", user.id).execute()
-    if not res.data:
-        return jsonify({"error": "Journey not found"}), 404
+    supabase.table("journeys").delete().eq("id", journey_id).eq("user_id", user.id).execute()
     return jsonify({"error": None})
 
 

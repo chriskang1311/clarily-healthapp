@@ -769,7 +769,12 @@ const JourneyDetail = () => {
                       <PlanSelectCard
                         key={plan.id}
                         selected={selectedPlanId === plan.id}
-                        onClick={() => setSelectedPlanId(plan.id)}
+                        onClick={() => {
+                          if (selectedPlanId !== plan.id) {
+                            setSelectedPlanId(plan.id);
+                            setJourney(prev => ({ ...prev, insurance_analysis: null }));
+                          }
+                        }}
                       >
                         <PlanTypeBadge>{plan.plan_type || 'Primary'}</PlanTypeBadge>
                         <PlanInfo>
